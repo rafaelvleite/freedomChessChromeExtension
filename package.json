@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "@types/chrome": "^0.0.136",
+    "sweetalert2": "^10.16.7",
     "types": "^0.1.1"
   }
 }
