@@ -77,6 +77,8 @@ window.onload = () =>{
     window['freedomEnabled'] = false;
     window['observer'] = new MutationObserver(callback);
     
+    
+        
     window['confirm'] = function(question, text, confirmButtonText, callback) {
         Swal.fire({
               title: question,
@@ -470,6 +472,8 @@ function makeMove(source, destination) {
 // Observe if moves list has changed
 function startObservingMoves() {
 
+
+
     var movesPlayed = getMovesCount();
             
     // in case we just started a game as black and expecting opponent to play
@@ -491,12 +495,34 @@ function startObservingMoves() {
     }
     
     // Options for the observer (which mutations to observe)
-    var config = {
-      attributes: false,
-      childList: true,
-      subtree: true
-    };
-    
+    if (pageType == "play") {
+        var config = {
+        attributes: false,
+        childList: true,
+        subtree: true
+        };
+    }
+    else if (pageType == "analysis") {
+        var config = {
+        attributes: false,
+        childList: true,
+        subtree: false
+        };
+    }
+    else if (pageType == "daily") {
+        var config = {
+        attributes: false,
+        childList: true,
+        subtree: true
+        };
+    }
+    else if (pageType == "live") {
+        var config = {
+        attributes: false,
+        childList: true,
+        subtree: true
+        };
+    }
     // Start observing the target node for configured mutations
     observer.observe(targetNode, config);
 
@@ -508,7 +534,15 @@ function startObservingMoves() {
 
 
 // Callback function to execute when mutations are observed
-var callback = function() {
+var callback = function(mutations) {
+
+    if (mutations) {
+        mutations.forEach(function(mutation) {
+        console.log(mutation);
+          });
+    }
+    
+
 
     if (freedomEnabled == true) {
         // get player color
