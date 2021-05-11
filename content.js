@@ -24,18 +24,26 @@ window.onload = () =>{
         window['pageType'] = "daily";
     }
     // Observe behavior for live game mode
-    else if (currentUrl.includes("live")){
-        window['movesListBoxClass'] = 'move-list-wrapper.move-list-move-list.move-list-move-list';
-        window['moveNodeClass'] = '.move';
-        window['pageType'] = "live";
+    else if ((currentUrl.includes("live")) && (!currentUrl.includes("game"))){
+        window['movesListBoxClass'] = '.vertical-move-list-component';
+        window['moveNodeClass'] = '.vertical-move-list-notation-vertical';
+        window['pageType'] = "liveNoGame";
     }
+    // Observe behavior for live game mode
+    else if ((currentUrl.includes("live")) && (currentUrl.includes("game"))){
+        window['movesListBoxClass'] = '.move-list-move-list.vertical-move-list';
+        window['moveNodeClass'] = '.move';
+        window['pageType'] = "liveGame";
+    }
+    
+    
 
     // Create button for enabling Freedom Mode
     const button = document.createElement('button');
     var buttonImageUrl = chrome.runtime.getURL('images/speech-icon.png');
     button.id = "freedomButton";
     button.className = "freedomButtonClass";
-    button.innerHTML = '<img src="' + buttonImageUrl + '" style="width:30px;" />';
+    button.innerHTML = '<img src="' + buttonImageUrl + '" style="width:30px; float:left; margin-left: -20%;" />';
     
     if (pageType == "play") {
         var checkExist = setInterval(function() {
@@ -62,10 +70,10 @@ window.onload = () =>{
            }
         }, 100); // check every 100ms
     }
-    else if (pageType == "live"){
+    else if ((pageType == "liveNoGame") || (pageType == "liveGame")){
         var checkExist = setInterval(function() {
-           if ($('.board-layout-controls').length) {
-              document.querySelector('.board-layout-controls').append(button);
+           if ($('.live-game-buttons-component').length) {
+              document.querySelector('.live-game-buttons-component').append(button);
               clearInterval(checkExist);
            }
         }, 100); // check every 100ms
@@ -165,6 +173,34 @@ function enableMouseCoordinatesDebug() {
     e.target.title = "X is "+x+" and Y is "+y;
     };
 }
+
+// see wheter the game has already started or not
+function hasTheGameStarted(){
+    if ((pageType == "liveGame") || (pageType == "liveNoGame")) {
+        if(moveNodeClass.length){
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    else {
+        return true;
+    }
+}
+
+
+
+// see wheter the game is over or not
+function isGameOver(){
+    if ($('.game-result').length) {
+        return $('.game-result').text();
+    }
+    else {
+        return false;
+    }
+}
+
 
 
 // See board orientation to get player color
@@ -349,7 +385,20 @@ function getMovesCount(){
             var localMovesMadeCount = 0;
         }
     }
-    else if (pageType == "live"){
+    else if (pageType == "liveNoGame"){
+        if (document.querySelector(movesListBoxClass) && document.querySelector(movesListBoxClass).firstChild){
+            var movesArray = document.querySelectorAll(moveNodeClass);
+            var lastNodeArray = movesArray[movesArray.length - 1].childNodes;
+            var localMovesMadeCount = ((movesArray.length) * 2);
+            if (lastNodeArray.length == 3){
+                localMovesMadeCount --;
+            }
+        }
+        else {
+            var localMovesMadeCount = 0;
+        }
+    }      
+    else if (pageType == "liveGame"){
         if (document.querySelector(movesListBoxClass) && document.querySelector(movesListBoxClass).firstChild){
             var movesArray = document.querySelectorAll(moveNodeClass);
             var lastNodeArray = movesArray[movesArray.length - 1].childNodes;
@@ -396,7 +445,7 @@ function getLastMoveMade(){
             var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
         }
     }
-    else if (pageType == "live"){
+    else if (pageType == "liveNoGame"){
         var lastMoveMadeDivs = lastMoveMade.childNodes;
         if (movesMadeCount % 2 == 0){
             var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
@@ -405,6 +454,16 @@ function getLastMoveMade(){
             var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
         }
     }
+    else if (pageType == "liveGame"){
+        var lastMoveMadeDivs = lastMoveMade.childNodes;
+        if (movesMadeCount % 2 == 0){
+            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
+        }
+        else if (movesMadeCount % 2 != 0){
+            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
+        }
+    }
+    
     // remove move number if exists
     var lastMoveMadeString = lastMoveMade.textContent;
     if (lastMoveMadeString.split(" ")) {
@@ -472,8 +531,6 @@ function makeMove(source, destination) {
 // Observe if moves list has changed
 function startObservingMoves() {
 
-
-
     var movesPlayed = getMovesCount();
             
     // in case we just started a game as black and expecting opponent to play
@@ -516,11 +573,18 @@ function startObservingMoves() {
         subtree: true
         };
     }
-    else if (pageType == "live") {
+    else if (pageType == "liveNoGame") {
         var config = {
-        attributes: false,
-        childList: true,
-        subtree: true
+        attributes: true,
+        childList: false,
+        subtree: false
+        };
+    }
+    else if (pageType == "liveGame") {
+        var config = {
+        attributes: true,
+        childList: false,
+        subtree: false
         };
     }
     // Start observing the target node for configured mutations
@@ -535,16 +599,15 @@ function startObservingMoves() {
 
 // Callback function to execute when mutations are observed
 var callback = function(mutations) {
-
-    if (mutations) {
-        mutations.forEach(function(mutation) {
-        console.log(mutation);
-          });
-    }
     
+    // check if game started
+    var hasTheGameAlreadyStarted = hasTheGameStarted();    
+
+    // check if game is over
+    var isTheGameOver = isGameOver();    
 
 
-    if (freedomEnabled == true) {
+    if ((freedomEnabled == true) && (hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
         // get player color
         var playerColor = getPlayerColor();
     
@@ -595,7 +658,15 @@ var callback = function(mutations) {
     }
     else {
         window['observer'].disconnect(); 
-    }    
+        Swal.fire({
+            icon: 'success',
+            title: "Destivado!",
+            text: "O modo Freedom foi desativado.",
+            showConfirmButton: false,
+            timer: 1500
+        });
+        freedomEnabled = false;
+    }   
 };
 
 
@@ -605,21 +676,31 @@ function enableFreedomMode() {
 
     // enableMouseCoordinatesDebug();
     
-    // get player color
-    var playerColor = getPlayerColor();
+    // check if game started
+    var hasTheGameAlreadyStarted = hasTheGameStarted();
     
-    // get moves count
-    var inicialMovesMadeCount = getMovesCount();
+    // check if game is over
+    var isTheGameOver = isGameOver();
+    
+    if ((hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
+    
+        // get player color
+        var playerColor = getPlayerColor();
         
-    // make first move if you are white or expect move from opponent if you are black
-    if (inicialMovesMadeCount == 0){
-        if (playerColor == "w"){
-            getTheMoveInputsAndMakeMove();
+        // get moves count
+        var inicialMovesMadeCount = getMovesCount();
+            
+        // make first move if you are white or expect move from opponent if you are black
+        if (inicialMovesMadeCount == 0){
+            if (playerColor == "w"){
+                getTheMoveInputsAndMakeMove();
+            }
         }
-    }
+        
+        // start observing opponent's moves
+        startObservingMoves();     
     
-    // start observing opponent's moves
-    startObservingMoves();
+    }
 }
 
 
