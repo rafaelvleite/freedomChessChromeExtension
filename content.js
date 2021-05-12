@@ -130,7 +130,7 @@ window.onload = () =>{
                     });
                     setTimeout(function(){ 
                         enableFreedomMode();
-                    }, 1500);
+                    }, 2000);
                     freedomEnabled = true;
                 }
                 else {
@@ -171,20 +171,13 @@ window.onload = () =>{
 
 }
 
-// Text to Speech
-window['speech'] = new SpeechSynthesisUtterance();
-speech.lang = "pt";
-
-// Play beep
-window['context'] = new (window.AudioContext || window.webkitAudioContext)();
-
 
 // Speech Recognition
 window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 window['recognition'] = new SpeechRecognition();
 recognition.interimResults = true;
 recognition.lang = 'pt-BR';
-    
+
 recognition.onresult = function(e) {
     
     var text = Array.from(e.results)
@@ -193,74 +186,90 @@ recognition.onresult = function(e) {
       .join("");
       
     if (e.results[0].isFinal) {
-        
-        // remove spaces if only square for pawn move
-        if (text.length <= 3) {
-            text = text.replace(/ +/g, "");
-        }
-        
-        // replace text for numbers
-        text = text.replace(/ um/, "1");
-        text = text.replace(/ dois/, "2");
-        text = text.replace(/ três/, "3");
-        text = text.replace(/ quatro/, "4");
-        text = text.replace(/ cinco/, "5");
-        text = text.replace(/ seis/, "6");
-        text = text.replace(/ sete/, "7");
-        text = text.replace(/ oito/, "8");
-        text = text.replace(/rock/, "roque");
-        
-        
-        var legalMoves = chess.moves();
-        console.log(legalMoves);
-        legalMoves = legalMoves.map(function(x){return x.replace(/N/, 'Cavalo ');});
-        legalMoves = legalMoves.map(function(x){return x.replace(/R/, 'Torre ');});
-        legalMoves = legalMoves.map(function(x){return x.replace(/K/, 'Rei ');});
-        legalMoves = legalMoves.map(function(x){return x.replace(/Q/, 'Dama ');});
-        legalMoves = legalMoves.map(function(x){return x.replace(/B/, 'Bispo ');});
-        legalMoves = legalMoves.map(function(x){return x.replace(/x/, ' por ');});
-        legalMoves = legalMoves.map(function(x){return x.replace(/O-O-O/, 'Grande roque');});
-        legalMoves = legalMoves.map(function(x){return x.replace(/O-O/, 'Roque');});
-        
-        
-      
-        var bestMove = "";
-        var similarityReference = 0;
-        
-        for (var move in legalMoves) {
-            var stringsSimilarity = similarity(text, legalMoves[move]);
-            if (stringsSimilarity >= similarityReference) {
-                similarityReference = stringsSimilarity;
-                bestMove = legalMoves[move];
-            }
-        }
-        var indexForBestMove = legalMoves.indexOf(bestMove);
-        legalMoves = chess.moves();
-        var chosenMove = legalMoves[indexForBestMove];
     
-        if (similarityReference >= 0.6) {
-            chess.move(chosenMove);
-            var movesHistory = chess.history({ verbose: true });
-            var lastHistoryMove = movesHistory[movesHistory.length -1];
-            source = lastHistoryMove.from;
-            destination = lastHistoryMove.to;
-            chess.undo();
-            makeMove(source, destination);    
+        console.log(text);
+    
+        // ativar voz para lances do adversário
+        if (text.includes("deficiente visual")) {
+            window['deficienteVisual'] = true;
+            var deficienteVisualMessage = "Modo para Deficiencia Visual Ativado!"
+            speech.text = deficienteVisualMessage;
+            window.speechSynthesis.speak(speech);
+        }
+        else if (text.includes("desativar")) {
+            enableDisableFreedomMode();
         }
         else {
-            console.log(text);
-            console.log(chosenMove); 
-            console.log(similarityReference); 
-            console.log(chess.fen());
-            // play beep sound
-            var osc = context.createOscillator(); // instantiate an oscillator
-            osc.type = 'sine'; // this is the default - also square, sawtooth, triangle
-            osc.frequency.value = 440; // Hz
-            osc.connect(context.destination); // connect it to the destination
-            osc.start(); // start the oscillator
-            osc.stop(context.currentTime + 0.5); // stop 2 seconds after the current time
-        }
         
+            // remove spaces if only square for pawn move
+            if (text.length <= 3) {
+                text = text.replace(/ +/g, "");
+            }
+            
+            // replace text for numbers
+            text = text.replace(/ um/, "1");
+            text = text.replace(/ dois/, "2");
+            text = text.replace(/ três/, "3");
+            text = text.replace(/ quatro/, "4");
+            text = text.replace(/ cinco/, "5");
+            text = text.replace(/ seis/, "6");
+            text = text.replace(/ sete/, "7");
+            text = text.replace(/ oito/, "8");
+            text = text.replace(/rock/, "roque");
+            
+            
+            var legalMoves = chess.moves();
+            console.log(legalMoves);
+            legalMoves = legalMoves.map(function(x){return x.replace(/N/, 'Cavalo ');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/R/, 'Torre ');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/K/, 'Rei ');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/Q/, 'Dama ');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/B/, 'Bispo ');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/x/, ' por ');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/O-O-O/, 'Grande roque');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/O-O/, 'Roque');});
+            
+            
+          
+            var bestMove = "";
+            var similarityReference = 0;
+            
+            for (var move in legalMoves) {
+                var stringsSimilarity = similarity(text, legalMoves[move]);
+                if (stringsSimilarity >= similarityReference) {
+                    similarityReference = stringsSimilarity;
+                    bestMove = legalMoves[move];
+                }
+            }
+            var indexForBestMove = legalMoves.indexOf(bestMove);
+            legalMoves = chess.moves();
+            var chosenMove = legalMoves[indexForBestMove];
+        
+            if (similarityReference >= 0.6) {
+                chess.move(chosenMove);
+                var movesHistory = chess.history({ verbose: true });
+                var lastHistoryMove = movesHistory[movesHistory.length -1];
+                source = lastHistoryMove.from;
+                destination = lastHistoryMove.to;
+                chess.undo();
+                makeMove(source, destination);    
+            }
+            else {
+                //console.log(text);
+                //console.log(chosenMove); 
+                //console.log(similarityReference); 
+                //console.log(chess.fen());
+                // play beep sound
+                // Play beep
+                let context = new (window.AudioContext || window.webkitAudioContext)();
+                var osc = context.createOscillator(); // instantiate an oscillator
+                osc.type = 'sine'; // this is the default - also square, sawtooth, triangle
+                osc.frequency.value = 440; // Hz
+                osc.connect(context.destination); // connect it to the destination
+                osc.start(); // start the oscillator
+                osc.stop(context.currentTime + 0.5); // stop 2 seconds after the current time
+            } 
+        } 
     }
 };
 
@@ -643,45 +652,40 @@ var callback = function(mutations) {
         var lastMoveMadeString = getLastMoveMade();
         lastMoveMadeString = lastMoveMadeString.trim();
         
+        // last move made to speech
+        var spokenLastMoveMadeString = lastMoveMadeString;
+        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/T/, "Torre ");;
+        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/C/, "Cavalo ");
+        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/B/, "Bispo ");
+        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/D/, "Dama ");
+        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/R/, "Rei ");
+        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/O-O-O/, "Grande Roque ");
+        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/O-O/, "Roque ");
+        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/x/, " por ");
+        
         // make move on background
         var englishLastMadeMoveString = lastMoveMadeString.replace(/C/, 'N');
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/D/, 'Q');
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/R/, 'K');
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/T/, 'R');
-        
         chess.move(englishLastMadeMoveString);
-        //console.log(chess.fen());
 
             
         // make the alert that move has been played
-        window.setTimeout(function(){
-            if (movesMadeCount %2 == 0) {
-                Swal.fire({
-                    icon: 'success',
-                    title: "As Pretas jogaram " + lastMoveMadeString + ", agora as Brancas jogam!",
-                    showConfirmButton: false,
-                    timer: 1500,
-                    position: "center-end",
-                    customClass: {
-                        popup: 'moveInputClass',
-                    }
-                });
+        if (movesMadeCount %2 == 0) {
+            if (deficienteVisual == true) {
+                var speechMessage = "As Pretas jogaram " + spokenLastMoveMadeString + ", agora as Brancas jogam!";                
+                speech.text = speechMessage;
+                window.speechSynthesis.speak(speech);
             }
-            else{
-                Swal.fire({
-                    icon: 'success',
-                    title: "As Brancas jogaram " + lastMoveMadeString + ", agora as Pretas jogam!",
-                    showConfirmButton: false,
-                    timer: 1500,
-                    position: "center-end",
-                    customClass: {
-                        popup: 'moveInputClass',
-                    }
-                });
+        }
+        else{
+            if (deficienteVisual == true) {
+                var speechMessage = "As Brancas jogaram " + spokenLastMoveMadeString + ", agora as Pretas jogam!";
+                speech.text = speechMessage;
+                window.speechSynthesis.speak(speech);
             }
-        }, 500);
-        
-    
+        }
     }
     else {
         window['observer'].disconnect(); 
@@ -699,7 +703,6 @@ var callback = function(mutations) {
 
 function getPiecesToFEN() {
 
-    
     var fenPosition = "";
     for (var i = 8; i >=1; i--) {
         for (var j = 1; j <=8; j++) {
@@ -748,22 +751,33 @@ function enableFreedomMode() {
 
     // enableMouseCoordinatesDebug();
     
+    // Text to Speech
+    window['speech'] = new SpeechSynthesisUtterance();
+    speech.lang = "pt-BR";
+    speech.rate = 1.1;
+    speech.pitch = 1;
+    speech.volume = 1;
+    
+    // deficiente visual?
+    window['deficienteVisual'] = false;
+
     // get starting fen
     var fenPosition = getPiecesToFEN();
-    console.log(fenPosition);
-    
     
     // Start chessboard to follow the game on background
     window['chess'] = new Chess(fenPosition);
-    console.log(chess.fen());
 
-
-    
     // check if game started
     var hasTheGameAlreadyStarted = hasTheGameStarted();
     
     // check if game is over
     var isTheGameOver = isGameOver();
+    
+    // welcome message and instructions
+    var welcomeMessage = "Modo Freedom Ativado, seja bem-vindo! Se quiser desativar este modo, basta dizer Desativar. Se você for deficiente visual, diga agora 'Sou deficiente visual' para que eu diga em voz alta os lances de seu adversário. Boa partida!"
+    speech.text = welcomeMessage;
+    console.log(speech);
+    window.speechSynthesis.speak(speech);
     
     if ((hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
     
