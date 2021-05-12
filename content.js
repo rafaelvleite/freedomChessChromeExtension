@@ -1,6 +1,19 @@
-//https://medium.com/swlh/programming-a-chess-bot-for-chess-com-fa6bd7e1da76
+// https://medium.com/swlh/programming-a-chess-bot-for-chess-com-fa6bd7e1da76
+// references for speech: https://codepen.io/Web_Cifar/pen/jOqBEjE and https://codeburst.io/html5-speech-recognition-api-670846a50e92
+
 
 window.onload = () =>{
+
+    // start chess board for background
+    'use strict';
+    const script = document.createElement('script');
+    script.setAttribute("type", "module");
+    script.setAttribute("src", chrome.extension.getURL('thirdParty/chess.js/chess.js'));
+    const head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+    head.insertBefore(script, head.lastChild);
+
+    // Start chessboard to follow the game on background
+    window['chess'] = new Chess();
 
     // get classes for elements for functions on different pages
     window['currentUrl'] = window.location.href;
@@ -37,7 +50,6 @@ window.onload = () =>{
     }
     
     
-
     // Create button for enabling Freedom Mode
     const button = document.createElement('button');
     var buttonImageUrl = chrome.runtime.getURL('images/speech-icon.png');
@@ -85,8 +97,6 @@ window.onload = () =>{
     window['freedomEnabled'] = false;
     window['observer'] = new MutationObserver(callback);
     
-    
-        
     window['confirm'] = function(question, text, confirmButtonText, callback) {
         Swal.fire({
               title: question,
@@ -108,9 +118,9 @@ window.onload = () =>{
         
         if (freedomEnabled == false) {
         
-            question = 'Você deseja ativar o Modo Freedom?';
-            text = "Você passará a falar os lances ao invés de usar o mouse.";
-            confirmButtonText = 'Sim, ative!';
+            var question = 'Você deseja ativar o Modo Freedom?';
+            var text = "Você passará a falar os lances ao invés de usar o mouse.";
+            var confirmButtonText = 'Sim, ative!';
             
             confirm(question, text, confirmButtonText, function (confirmed) {
                 if (confirmed) {
@@ -165,6 +175,70 @@ window.onload = () =>{
 }
 
 
+// Speech Recognition
+window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+window['recognition'] = new SpeechRecognition();
+recognition.interimResults = true;
+recognition.lang = 'pt-BR';
+    
+recognition.onresult = function(e) {
+    
+    const text = Array.from(e.results)
+      .map((result) => result[0])
+      .map((result) => result.transcript)
+      .join("");
+      
+    if (e.results[0].isFinal) {
+        var copiedText = text;
+        var legalMoves = chess.moves();
+        legalMoves = legalMoves.map(function(x){return x.replace(/N/, 'Cavalo ');});
+        legalMoves = legalMoves.map(function(x){return x.replace(/R/, 'Torre ');});
+        legalMoves = legalMoves.map(function(x){return x.replace(/K/, 'Rei ');});
+        legalMoves = legalMoves.map(function(x){return x.replace(/Q/, 'Dama ');});
+        legalMoves = legalMoves.map(function(x){return x.replace(/B/, 'Bispo ');});
+        legalMoves = legalMoves.map(function(x){return x.replace(/x/, ' por ');});
+      
+        var bestMove = "";
+        var similarityReference = 0;
+        
+        for (var move in legalMoves) {
+            var stringsSimilarity = similarity(text, legalMoves[move]);
+            if (stringsSimilarity >= similarityReference) {
+                similarityReference = stringsSimilarity;
+                bestMove = legalMoves[move];
+            }
+        }
+        var indexForBestMove = legalMoves.indexOf(bestMove);
+        legalMoves = chess.moves();
+        var chosenMove = legalMoves[indexForBestMove];
+    
+        if (similarityReference >= 0.8) {
+            chess.move(chosenMove);
+            var movesHistory = chess.history({ verbose: true });
+            var lastHistoryMove = movesHistory[movesHistory.length -1];
+            source = lastHistoryMove.from;
+            destination = lastHistoryMove.to;
+            chess.undo();
+            makeMove(source, destination);    
+        }
+        
+    }
+};
+
+recognition.onend = function () {
+    if (freedomEnabled == true) {
+        recognition.start();
+    }
+    else {
+        recognition.stop();
+    }
+};
+
+
+
+
+
+
 // Debug for x y coordinates on screen
 function enableMouseCoordinatesDebug() {
     document.onmousemove = function(e){
@@ -217,135 +291,47 @@ function getPlayerColor() {
 }
 
 
-var validationMessage = null;
 
-// cancel move in case no source or destination provided, or strange move
-function validateSourceAndDestinationSquares(source, destination){
+// funcões para similaridade de frases por distância de Levenshtein
+function editDistance(s1, s2) {
+  s1 = s1.toLowerCase();
+  s2 = s2.toLowerCase();
 
-    var possibleColumns = [ "a", "b", "c", "d", "e", "f", "g", "h" ];
-    var possibleRows = [ "1", "2", "3", "4", "5", "6", "7", "8" ];
-    
-    if (source == null) {
-        validationMessage = ('Nenhuma casa de origem informada');
-    	return false;
-    } 
-    else if (destination == null) {
-        validationMessage = ("Nenhuma casa de destino informada.");
-        return false;
+  var costs = new Array();
+  for (var i = 0; i <= s1.length; i++) {
+    var lastValue = i;
+    for (var j = 0; j <= s2.length; j++) {
+      if (i == 0)
+        costs[j] = j;
+      else {
+        if (j > 0) {
+          var newValue = costs[j - 1];
+          if (s1.charAt(i - 1) != s2.charAt(j - 1))
+            newValue = Math.min(Math.min(newValue, lastValue),
+              costs[j]) + 1;
+          costs[j - 1] = lastValue;
+          lastValue = newValue;
+        }
+      }
     }
-    else if (source.length != 2) {
-        validationMessage = ("Problema com casa de origem do lance: " + source);
-        return false;
-    }
-    else if (destination.length != 2) {
-        validationMessage = ("Problema com casa de destino do lance: " + destination);
-        return false;
-    }
-    else if (!possibleColumns.includes(source[0])) {
-        validationMessage = ("Na casa de origem, não existe a coluna " + source[0]);
-        return false;    
-    }
-    else if (!possibleColumns.includes(destination[0])) {
-        validationMessage = ("Na casa de destino, não existe a coluna " + destination[0]);
-        return false;    
-    }
-    else if (!possibleRows.includes(source[1])) {
-        validationMessage = ("Na casa de origem, não existe a linha " + source[1]);
-        return false;    
-    }
-    else if (!possibleRows.includes(destination[1])) {
-        validationMessage = ("Na casa de destino, não existe a linha " + destination[1]);
-        return false;    
-    }
-    else {
-        return true;
-    }
+    if (i > 0)
+      costs[s2.length] = lastValue;
+  }
+  return costs[s2.length];
 }
-
-
-// check for legal move
-function checkForLegalMove(referenceMovesMadeCount){  
-    var newMovesMadeCount = getMovesCount();
-    if (newMovesMadeCount == referenceMovesMadeCount){
-        Swal.fire({
-            icon: 'warning',
-            title: "Lance ilegal, por favor faça seu lance novamente",
-            showConfirmButton: false,
-            timer: 1500
-        });
-        window.setTimeout(function(){ 
-            getTheMoveInputsAndMakeMove(); 
-        }, 2000);  
-    }
-    return true;
+function similarity(s1, s2) {
+  var longer = s1;
+  var shorter = s2;
+  if (s1.length < s2.length) {
+    longer = s2;
+    shorter = s1;
+  }
+  var longerLength = longer.length;
+  if (longerLength == 0) {
+    return 1.0;
+  }
+  return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
 }
-
-
-// get the move inputs, validate and check for legal
-async function getTheMoveInputsAndMakeMove() {
-    var validateInputs = false;
-    
-    const { value: source } = await Swal.fire({
-        input: 'text',
-        inputLabel: 'Por favor digite a casa de origem de seu lance',
-        inputPlaceholder: 'Exemplo: e2',
-        position: "center-end",
-        customClass: {
-            popup: 'moveInputClass',
-        }
-    });
-    
-    const { value: destination } = await Swal.fire({
-        input: 'text',
-        inputLabel: 'Por favor digite a casa de destino de seu lance',
-        inputPlaceholder: 'Exemplo: e4',
-        position: "center-end",
-        customClass: {
-            popup: 'moveInputClass',
-        }
-    });
-
-    validateInputs = validateSourceAndDestinationSquares(source, destination);
-    if (validateInputs == false) {
-        Swal.fire({
-            icon: 'warning',
-            title: validationMessage + ". Por favor faça seu lance novamente",
-            showConfirmButton: false,
-            timer: 1500,
-            position: "center-end",
-            customClass: {
-                popup: 'moveInputClass',
-            }
-        });
-        window.setTimeout(function(){ 
-            getTheMoveInputsAndMakeMove(); 
-        }, 2000);  
-    }
-    else {
-        // passed validation, make the move        
-        // get moves count before making the move to validate legal move after move attempt
-        if (document.querySelector(movesListBoxClass)){
-            var referenceMovesMadeCount = getMovesCount();
-        }
-        else{
-            var movesMadeCount = 0;    
-        }
-        
-        makeMove(source, destination);
-        
-        var legalMovePassed = false;
-        
-        // check if move is legal
-        window.setTimeout(function(){ 
-            legalMovePassed = checkForLegalMove(referenceMovesMadeCount);
-        }, 1000);
-        
-        if (legalMovePassed == true) {
-            return true;
-        }
-    } 
-}
-
 
 
 
@@ -616,7 +602,18 @@ var callback = function(mutations) {
     
         // get last move made
         var lastMoveMadeString = getLastMoveMade();
-    
+        lastMoveMadeString = lastMoveMadeString.trim();
+        
+        // make move on background
+        var englishLastMadeMoveString = lastMoveMadeString.replace(/C/, 'N');
+        englishLastMadeMoveString = englishLastMadeMoveString.replace(/D/, 'Q');
+        englishLastMadeMoveString = englishLastMadeMoveString.replace(/R/, 'K');
+        englishLastMadeMoveString = englishLastMadeMoveString.replace(/T/, 'R');
+        
+        chess.move(englishLastMadeMoveString);
+        console.log(chess.fen());
+
+            
         // make the alert that move has been played
         window.setTimeout(function(){
             if (movesMadeCount %2 == 0) {
@@ -630,11 +627,6 @@ var callback = function(mutations) {
                         popup: 'moveInputClass',
                     }
                 });
-                if (playerColor == "w") {
-                    window.setTimeout(function(){ 
-                        getTheMoveInputsAndMakeMove(); 
-                    }, 1000);  
-                }
             }
             else{
                 Swal.fire({
@@ -647,13 +639,9 @@ var callback = function(mutations) {
                         popup: 'moveInputClass',
                     }
                 });
-                if (playerColor == "b") {
-                    window.setTimeout(function(){ 
-                        getTheMoveInputsAndMakeMove(); 
-                    }, 1000);  
-                }
             }
         }, 500);
+        
     
     }
     else {
@@ -684,18 +672,10 @@ function enableFreedomMode() {
     
     if ((hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
     
+        recognition.start();
+    
         // get player color
         var playerColor = getPlayerColor();
-        
-        // get moves count
-        var inicialMovesMadeCount = getMovesCount();
-            
-        // make first move if you are white or expect move from opponent if you are black
-        if (inicialMovesMadeCount == 0){
-            if (playerColor == "w"){
-                getTheMoveInputsAndMakeMove();
-            }
-        }
         
         // start observing opponent's moves
         startObservingMoves();     
