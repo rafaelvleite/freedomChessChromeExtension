@@ -740,7 +740,7 @@ function getPiecesToFEN() {
     
     for (var i = 8; i >=1; i--) {
         for (var j = 1; j <=8; j++) {
-            if ((pageType == "analysis") || (pageType == "play")) {
+            if ((pageType == "analysis") || (pageType == "play") || (pageType == "liveGame")) {
                 var classNameForPiece = '.piece.square-' + j + i;
             }
             else {
