@@ -229,12 +229,7 @@ function validateSourceAndDestinationSquares(source, destination){
 function checkForLegalMove(referenceMovesMadeCount){  
     var newMovesMadeCount = getMovesCount();
     if (newMovesMadeCount == referenceMovesMadeCount){
-        Swal.fire({
-            icon: 'warning',
-            title: "Lance ilegal, por favor faça seu lance novamente",
-            showConfirmButton: false,
-            timer: 1500
-        });
+        speak("Lance ilegal, por favor faça seu lance novamente");
         window.setTimeout(function(){ 
             getTheMoveInputsAndMakeMove(); 
         }, 2000);  
