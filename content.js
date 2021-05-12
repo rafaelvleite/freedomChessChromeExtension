@@ -241,6 +241,10 @@ recognition.onresult = function(e) {
             text = text.replace(/67/, "c7");
             text = text.replace(/68/, "c8");
             
+            // replace for column F
+            text = text.replace(/cavalete/, "Cavalo f");
+            
+            
             // replace Rainha for Dama
             text = text.replace(/rainha /i, "Dama ");
             
