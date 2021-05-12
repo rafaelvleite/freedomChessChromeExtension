@@ -311,6 +311,31 @@ function getUserVoiceInput(cb) {
     })
 }
 
+function getMoves(str) {
+    const regex = /^([A-Za-z])([0-9]{1})$/;
+
+    return str
+        .split(' ')
+        .filter(currentWord => regex.test(currentWord));
+}
+
+function getSteps(moves) {
+    if (!moves || !moves.length) return {
+        source: null,
+        destination: null
+    };
+
+    if (moves.length === 1) return {
+        source: moves[0],
+        destination: null
+    }
+
+    return {
+        source: moves[0].toLowerCase(),
+        destination: moves[1].toLowerCase()
+    }
+}
+
 // get the move inputs, validate and check for legal
 async function getTheMoveInputsAndMakeMove() {
     var validateInputs = false;
