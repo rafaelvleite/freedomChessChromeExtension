@@ -719,108 +719,71 @@ function getPiecesToFEN() {
 
     var fenPosition = "";
     
-    if ((pageType == "analysis") || (pageType == "play")) {
-        console.log("here");
-        for (var i = 8; i >=1; i--) {
-            for (var j = 1; j <=8; j++) {
-                console.log(fenPosition, i, j);
+    
+    console.log("here");
+    for (var i = 8; i >=1; i--) {
+        for (var j = 1; j <=8; j++) {
+            if ((pageType == "analysis") || (pageType == "play")) {
                 var classNameForPiece = '.square-' + j + i;
-                var pieceDiv = document.querySelector(classNameForPiece);
-                if (pieceDiv) {
-                    var listOfClasses = pieceDiv.classList;
-                    for (var classInfo in listOfClasses) {
-                        if (listOfClasses[classInfo][0] == "w") {
-                            fenPosition = fenPosition + listOfClasses[classInfo][1].toUpperCase(); 
-                        }
-                        else if (listOfClasses[classInfo][0] == "b") {
-                            fenPosition = fenPosition + listOfClasses[classInfo][1].toLowerCase(); 
-                        }
-                        else if (listOfClasses[classInfo] == "highlight") {
-                            if (j > 1){
-                                if (!isNaN(fenPosition[fenPosition.length -1])) {
-                                    var referenceNumber = fenPosition[fenPosition.length -1];
-                                    console.log(referenceNumber);
-                                    var newNumber = parseInt(referenceNumber) + 1;
-                                    fenPosition = fenPosition.slice(0, -1);
-                                    fenPosition = fenPosition + newNumber;
-                                }
-                                else {
-                                    fenPosition = fenPosition + "1";
-                                }
+            }
+            else {
+                var classNameForPiece = '.square-0' + j + "0" + i;
+            }
+            
+            var pieceDiv = document.querySelector(classNameForPiece);
+            if (pieceDiv) {
+                var listOfClasses = pieceDiv.classList;
+                for (var classInfo in listOfClasses) {
+                    if (listOfClasses[classInfo][0] == "w") {
+                        fenPosition = fenPosition + listOfClasses[classInfo][1].toUpperCase(); 
+                    }
+                    else if (listOfClasses[classInfo][0] == "b") {
+                        fenPosition = fenPosition + listOfClasses[classInfo][1].toLowerCase(); 
+                    }
+                    else if (listOfClasses[classInfo] == "highlight") {
+                        if (j > 1){
+                            if (!isNaN(fenPosition[fenPosition.length -1])) {
+                                var referenceNumber = fenPosition[fenPosition.length -1];
+                                console.log(referenceNumber);
+                                var newNumber = parseInt(referenceNumber) + 1;
+                                fenPosition = fenPosition.slice(0, -1);
+                                fenPosition = fenPosition + newNumber;
                             }
                             else {
                                 fenPosition = fenPosition + "1";
                             }
-                            
                         }
+                        else {
+                            fenPosition = fenPosition + "1";
+                        }
+                        
                     }
+                }
+            }
+            else {
+                if (j == 1) {
+                    fenPosition = fenPosition + "1";
+                    console.log("j=1");
+                }
+                else if (!isNaN(fenPosition[fenPosition.length -1])) {
+                    var referenceNumber = fenPosition[fenPosition.length -1];
+                    console.log(referenceNumber);
+                    var newNumber = parseInt(referenceNumber) + 1;
+                    fenPosition = fenPosition.slice(0, -1);
+                    fenPosition = fenPosition + newNumber;
                 }
                 else {
-                    if (j == 1) {
-                        fenPosition = fenPosition + "1";
-                        console.log("j=1");
-                    }
-                    else if (!isNaN(fenPosition[fenPosition.length -1])) {
-                        var referenceNumber = fenPosition[fenPosition.length -1];
-                        console.log(referenceNumber);
-                        var newNumber = parseInt(referenceNumber) + 1;
-                        fenPosition = fenPosition.slice(0, -1);
-                        fenPosition = fenPosition + newNumber;
-                    }
-                    else {
-                        fenPosition = fenPosition + "1";
-                    }
-                    
+                    fenPosition = fenPosition + "1";
                 }
                 
-            } 
-            fenPosition = fenPosition + "/";
-        }
-        var playerColor = getPlayerColor();
-        fenPosition = fenPosition.slice(0, -1);
-        fenPosition = fenPosition + " " + playerColor + " KQkq - 0 1";
-    
+            }
+            
+        } 
+        fenPosition = fenPosition + "/";
     }
-    else {
-        for (var i = 8; i >=1; i--) {
-            for (var j = 1; j <=8; j++) {
-                var classNameForPiece = '.square-0' + j + "0" + i;
-                var pieceDiv = document.querySelector(classNameForPiece);
-                if (pieceDiv) {
-                    var listOfClasses = pieceDiv.classList;
-                    for (var classInfo in listOfClasses) {
-                        if (listOfClasses[classInfo][0] == "w") {
-                            fenPosition = fenPosition + listOfClasses[classInfo][1].toUpperCase(); 
-                        }
-                        else if (listOfClasses[classInfo][0] == "b") {
-                            fenPosition = fenPosition + listOfClasses[classInfo][1].toLowerCase(); 
-                        }
-                    }
-                }
-                else {
-                    if (j == 1) {
-                        fenPosition = fenPosition + "1";
-                    }
-                    else if (!isNaN(fenPosition[fenPosition.length -1])) {
-                        var referenceNumber = fenPosition[fenPosition.length -1];
-                        var newNumber = parseInt(referenceNumber) + 1;
-                        fenPosition = fenPosition.slice(0, -1);
-                        fenPosition = fenPosition + newNumber;
-                    }
-                    else {
-                        fenPosition = fenPosition + "1";
-                    }
-                    
-                }
-                
-            } 
-            fenPosition = fenPosition + "/";
-        }
-        var playerColor = getPlayerColor();
-        fenPosition = fenPosition.slice(0, -1);
-        fenPosition = fenPosition + " " + playerColor + " KQkq - 0 1";
-    
-    }
+    var playerColor = getPlayerColor();
+    fenPosition = fenPosition.slice(0, -1);
+    fenPosition = fenPosition + " " + playerColor + " KQkq - 0 1";
     
     return fenPosition;
 } 
