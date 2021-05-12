@@ -12,9 +12,6 @@ window.onload = () =>{
     const head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
     head.insertBefore(script, head.lastChild);
 
-    // Start chessboard to follow the game on background
-    window['chess'] = new Chess();
-
     // get classes for elements for functions on different pages
     window['currentUrl'] = window.location.href;
     
@@ -255,7 +252,7 @@ recognition.onresult = function(e) {
             console.log(chosenMove); 
             console.log(similarityReference); 
             console.log(chess.fen());
-            // one context per document
+            // play beep sound
             var osc = context.createOscillator(); // instantiate an oscillator
             osc.type = 'sine'; // this is the default - also square, sawtooth, triangle
             osc.frequency.value = 440; // Hz
@@ -709,16 +706,23 @@ function getPiecesToFEN() {
             var classNameForPiece = '.square-' + j + i;
             var pieceDiv = document.querySelector(classNameForPiece+':not(.highlight)');
             if (pieceDiv) {
-                //console.log(pieceDiv);
                 var listOfClasses = pieceDiv.classList;
                 for (var classInfo in listOfClasses) {
-                
+                    if (listOfClasses[classInfo][0] == "w") {
+                        fenPosition = fenPosition + listOfClasses[classInfo][1].toUpperCase(); 
+                    }
+                    else if (listOfClasses[classInfo][0] == "b") {
+                        fenPosition = fenPosition + listOfClasses[classInfo][1].toLowerCase(); 
+                    }
                 }
             }
             else {
-                if (isNaN(fenPosition[fenPosition.length -1])) {
+                if (fenPosition == "") {
+                    fenPosition = "1";
+                }
+                else if (!isNaN(fenPosition[fenPosition.length -1])) {
                     var referenceNumber = fenPosition[fenPosition.length -1];
-                    var newNumber = referenceNumber++;
+                    var newNumber = parseInt(referenceNumber) + 1;
                     fenPosition = fenPosition.slice(0, -1);
                     fenPosition = fenPosition + newNumber;
                 }
@@ -729,8 +733,12 @@ function getPiecesToFEN() {
             }
             
         } 
+        fenPosition = fenPosition + "/";
     }
-    //console.log(fenPosition);
+    var playerColor = getPlayerColor();
+    fenPosition = fenPosition.slice(0, -1);
+    fenPosition = fenPosition + " " + playerColor + " KQkq - 0 1";
+    
     return fenPosition;
 } 
 
@@ -741,7 +749,14 @@ function enableFreedomMode() {
     // enableMouseCoordinatesDebug();
     
     // get starting fen
-    getPiecesToFEN();
+    var fenPosition = getPiecesToFEN();
+    console.log(fenPosition);
+    
+    
+    // Start chessboard to follow the game on background
+    window['chess'] = new Chess(fenPosition);
+    console.log(chess.fen());
+
 
     
     // check if game started
