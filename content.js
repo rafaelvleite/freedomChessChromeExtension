@@ -232,6 +232,14 @@ recognition.onresult = function(e) {
             text = text.replace(/damas e /i, "Dama c ");
             text = text.replace(/rainhas e /i, "Dama c ");
             text = text.replace(/reis e /i, "Rei c ");
+            text = text.replace(/61/, "c1");
+            text = text.replace(/62/, "c2");
+            text = text.replace(/63/, "c3");
+            text = text.replace(/64/, "c4");
+            text = text.replace(/65/, "c5");
+            text = text.replace(/66/, "c6");
+            text = text.replace(/67/, "c7");
+            text = text.replace(/68/, "c8");
             
             // replace Rainha for Dama
             text = text.replace(/rainha /i, "Dama ");
