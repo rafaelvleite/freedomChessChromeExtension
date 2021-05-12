@@ -174,6 +174,13 @@ window.onload = () =>{
 
 }
 
+// Text to Speech
+window['speech'] = new SpeechSynthesisUtterance();
+speech.lang = "pt";
+
+// Play beep
+window['context'] = new (window.AudioContext || window.webkitAudioContext)();
+
 
 // Speech Recognition
 window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -183,20 +190,42 @@ recognition.lang = 'pt-BR';
     
 recognition.onresult = function(e) {
     
-    const text = Array.from(e.results)
+    var text = Array.from(e.results)
       .map((result) => result[0])
       .map((result) => result.transcript)
       .join("");
       
     if (e.results[0].isFinal) {
-        var copiedText = text;
+        
+        // remove spaces if only square for pawn move
+        if (text.length <= 3) {
+            text = text.replace(/ +/g, "");
+        }
+        
+        // replace text for numbers
+        text = text.replace(/ um/, "1");
+        text = text.replace(/ dois/, "2");
+        text = text.replace(/ três/, "3");
+        text = text.replace(/ quatro/, "4");
+        text = text.replace(/ cinco/, "5");
+        text = text.replace(/ seis/, "6");
+        text = text.replace(/ sete/, "7");
+        text = text.replace(/ oito/, "8");
+        text = text.replace(/rock/, "roque");
+        
+        
         var legalMoves = chess.moves();
+        console.log(legalMoves);
         legalMoves = legalMoves.map(function(x){return x.replace(/N/, 'Cavalo ');});
         legalMoves = legalMoves.map(function(x){return x.replace(/R/, 'Torre ');});
         legalMoves = legalMoves.map(function(x){return x.replace(/K/, 'Rei ');});
         legalMoves = legalMoves.map(function(x){return x.replace(/Q/, 'Dama ');});
         legalMoves = legalMoves.map(function(x){return x.replace(/B/, 'Bispo ');});
         legalMoves = legalMoves.map(function(x){return x.replace(/x/, ' por ');});
+        legalMoves = legalMoves.map(function(x){return x.replace(/O-O-O/, 'Grande roque');});
+        legalMoves = legalMoves.map(function(x){return x.replace(/O-O/, 'Roque');});
+        
+        
       
         var bestMove = "";
         var similarityReference = 0;
@@ -212,7 +241,7 @@ recognition.onresult = function(e) {
         legalMoves = chess.moves();
         var chosenMove = legalMoves[indexForBestMove];
     
-        if (similarityReference >= 0.8) {
+        if (similarityReference >= 0.6) {
             chess.move(chosenMove);
             var movesHistory = chess.history({ verbose: true });
             var lastHistoryMove = movesHistory[movesHistory.length -1];
@@ -220,6 +249,19 @@ recognition.onresult = function(e) {
             destination = lastHistoryMove.to;
             chess.undo();
             makeMove(source, destination);    
+        }
+        else {
+            console.log(text);
+            console.log(chosenMove); 
+            console.log(similarityReference); 
+            console.log(chess.fen());
+            // one context per document
+            var osc = context.createOscillator(); // instantiate an oscillator
+            osc.type = 'sine'; // this is the default - also square, sawtooth, triangle
+            osc.frequency.value = 440; // Hz
+            osc.connect(context.destination); // connect it to the destination
+            osc.start(); // start the oscillator
+            osc.stop(context.currentTime + 0.5); // stop 2 seconds after the current time
         }
         
     }
@@ -611,7 +653,7 @@ var callback = function(mutations) {
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/T/, 'R');
         
         chess.move(englishLastMadeMoveString);
-        console.log(chess.fen());
+        //console.log(chess.fen());
 
             
         // make the alert that move has been played
@@ -658,11 +700,49 @@ var callback = function(mutations) {
 };
 
 
+function getPiecesToFEN() {
+
+    
+    var fenPosition = "";
+    for (var i = 8; i >=1; i--) {
+        for (var j = 1; j <=8; j++) {
+            var classNameForPiece = '.square-' + j + i;
+            var pieceDiv = document.querySelector(classNameForPiece+':not(.highlight)');
+            if (pieceDiv) {
+                //console.log(pieceDiv);
+                var listOfClasses = pieceDiv.classList;
+                for (var classInfo in listOfClasses) {
+                
+                }
+            }
+            else {
+                if (isNaN(fenPosition[fenPosition.length -1])) {
+                    var referenceNumber = fenPosition[fenPosition.length -1];
+                    var newNumber = referenceNumber++;
+                    fenPosition = fenPosition.slice(0, -1);
+                    fenPosition = fenPosition + newNumber;
+                }
+                else {
+                    fenPosition = fenPosition + "1";
+                }
+                
+            }
+            
+        } 
+    }
+    //console.log(fenPosition);
+    return fenPosition;
+} 
+
 
 // enable Freedom Chess Mode
 function enableFreedomMode() {
 
     // enableMouseCoordinatesDebug();
+    
+    // get starting fen
+    getPiecesToFEN();
+
     
     // check if game started
     var hasTheGameAlreadyStarted = hasTheGameStarted();
