@@ -225,6 +225,16 @@ recognition.onresult = function(e) {
             text = text.replace(/ oito/, "8");
             text = text.replace(/rock/, "roque");
             
+            // replace for column C
+            text = text.replace(/cavalos e /i, "Cavalo c ");
+            text = text.replace(/torres e /i, "Torre c ");
+            text = text.replace(/bispos e /i, "Bispo c ");
+            text = text.replace(/damas e /i, "Dama c ");
+            text = text.replace(/rainhas e /i, "Dama c ");
+            text = text.replace(/reis e /i, "Rei c ");
+            
+            // replace Rainha for Dama
+            text = text.replace(/rainha /i, "Dama ");
             
             var legalMoves = chess.moves();
             console.log(legalMoves);
@@ -677,9 +687,9 @@ var callback = function(mutations) {
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/D/, 'Q');
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/R/, 'K');
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/T/, 'R');
-        //console.log(englishLastMadeMoveString);
-        //console.log(chess.fen());
-        //chess.move(englishLastMadeMoveString);
+        console.log(englishLastMadeMoveString);
+        console.log(chess.fen());
+        chess.move(englishLastMadeMoveString);
 
             
         // make the alert that move has been played
