@@ -242,6 +242,40 @@ function checkForLegalMove(referenceMovesMadeCount){
     return true;
 }
 
+function getBrowserVoices(synth) {
+    return new Promise(
+        function (resolve, reject) {
+            let id;
+
+            id = setInterval(() => {
+                if (synth.getVoices().length !== 0) {
+                    resolve(synth.getVoices());
+                    clearInterval(id);
+                }
+            }, 10);
+        }
+    )
+}
+
+async function getVoice(synth) {
+    const voices = await getBrowserVoices(synth);
+
+    return voices.find((voice) => /pt-BR/.test(voice.lang));
+}
+
+async function speak(phrase) {
+    const synth = window.speechSynthesis;
+    if (!synth) reject('Speak API is not supported!')
+
+    const utterance = new SpeechSynthesisUtterance();
+
+    utterance.text = phrase;
+    utterance.lang = 'ja-JP';
+    utterance.voice = await getVoice(synth);
+    utterance.rate = 1;
+
+    synth.speak(utterance);
+}
 
 // get the move inputs, validate and check for legal
 async function getTheMoveInputsAndMakeMove() {
