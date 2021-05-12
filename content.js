@@ -338,71 +338,51 @@ function getSteps(moves) {
 
 // get the move inputs, validate and check for legal
 async function getTheMoveInputsAndMakeMove() {
+
     var validateInputs = false;
-    
-    const { value: source } = await Swal.fire({
-        input: 'text',
-        inputLabel: 'Por favor digite a casa de origem de seu lance',
-        inputPlaceholder: 'Exemplo: e2',
-        position: "center-end",
-        customClass: {
-            popup: 'moveInputClass',
-        }
-    });
-    
-    const { value: destination } = await Swal.fire({
-        input: 'text',
-        inputLabel: 'Por favor digite a casa de destino de seu lance',
-        inputPlaceholder: 'Exemplo: e4',
-        position: "center-end",
-        customClass: {
-            popup: 'moveInputClass',
-        }
-    });
 
-    validateInputs = validateSourceAndDestinationSquares(source, destination);
-    if (validateInputs == false) {
-        Swal.fire({
-            icon: 'warning',
-            title: validationMessage + ". Por favor faça seu lance novamente",
-            showConfirmButton: false,
-            timer: 1500,
-            position: "center-end",
-            customClass: {
-                popup: 'moveInputClass',
+    getUserVoiceInput(async (err, userResponse) => {
+        if (err) getTheMoveInputsAndMakeMove();
+
+        const moves = getMoves(userResponse);
+        console.log('moves', moves)
+        const { source, destination } = getSteps(moves);
+        console.log('source', source);
+        console.log('destination', destination);
+
+
+        validateInputs = validateSourceAndDestinationSquares(source, destination);
+        if (validateInputs == false) {
+            speak(validationMessage + ". Por favor faça seu lance novamente");
+            window.setTimeout(function () {
+                getTheMoveInputsAndMakeMove();
+            }, 2000);
+        }
+        else {
+            // passed validation, make the move        
+            // get moves count before making the move to validate legal move after move attempt
+            if (document.querySelector(movesListBoxClass)) {
+                var referenceMovesMadeCount = getMovesCount();
             }
-        });
-        window.setTimeout(function(){ 
-            getTheMoveInputsAndMakeMove(); 
-        }, 2000);  
-    }
-    else {
-        // passed validation, make the move        
-        // get moves count before making the move to validate legal move after move attempt
-        if (document.querySelector(movesListBoxClass)){
-            var referenceMovesMadeCount = getMovesCount();
+            else {
+                var movesMadeCount = 0;
+            }
+
+            makeMove(source, destination);
+
+            var legalMovePassed = false;
+
+            // check if move is legal
+            window.setTimeout(function () {
+                legalMovePassed = checkForLegalMove(referenceMovesMadeCount);
+            }, 1000);
+
+            if (legalMovePassed == true) {
+                return true;
+            }
         }
-        else{
-            var movesMadeCount = 0;    
-        }
-        
-        makeMove(source, destination);
-        
-        var legalMovePassed = false;
-        
-        // check if move is legal
-        window.setTimeout(function(){ 
-            legalMovePassed = checkForLegalMove(referenceMovesMadeCount);
-        }, 1000);
-        
-        if (legalMovePassed == true) {
-            return true;
-        }
-    } 
+    });
 }
-
-
-
 
 // get moves count
 function getMovesCount(){
