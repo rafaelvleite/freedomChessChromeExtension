@@ -425,18 +425,18 @@ function getMovesCount(){
         }
     }
     else if (pageType == "liveNoGame"){
-        if (document.querySelector(movesListBoxClass) && document.querySelector(movesListBoxClass).firstChild){
+        if (document.querySelector(movesListBoxClass) && document.querySelectorAll(moveNodeClass).length){
             var movesArray = document.querySelectorAll(moveNodeClass);
             var lastNodeArray = movesArray[movesArray.length - 1].childNodes;
             var localMovesMadeCount = ((movesArray.length) * 2);
-            if (lastNodeArray.length == 3){
+            if (lastNodeArray[4].textContent == ""){
                 localMovesMadeCount --;
             }
         }
         else {
             var localMovesMadeCount = 0;
         }
-    }      
+    }    
     else if (pageType == "liveGame"){
         if (document.querySelector(movesListBoxClass) && document.querySelector(movesListBoxClass).firstChild){
             var movesArray = document.querySelectorAll(moveNodeClass);
@@ -487,10 +487,10 @@ function getLastMoveMade(){
     else if (pageType == "liveNoGame"){
         var lastMoveMadeDivs = lastMoveMade.childNodes;
         if (movesMadeCount % 2 == 0){
-            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
+            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 3];
         }
         else if (movesMadeCount % 2 != 0){
-            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
+            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 5];
         }
     }
     else if (pageType == "liveGame"){
@@ -505,6 +505,8 @@ function getLastMoveMade(){
     
     // remove move number if exists
     var lastMoveMadeString = lastMoveMade.textContent;
+    lastMoveMadeString = lastMoveMadeString.replaceAll("\n", "").trim();
+    
     if (lastMoveMadeString.split(" ")) {
         var lastMoveMadeStringArray = lastMoveMadeString.split(" ");
         lastMoveMadeString = lastMoveMadeStringArray[lastMoveMadeStringArray.length - 1];
@@ -571,6 +573,7 @@ function makeMove(source, destination) {
 function startObservingMoves() {
 
     var movesPlayed = getMovesCount();
+    console.log(movesPlayed);
             
     // in case we just started a game as black and expecting opponent to play
     if(movesPlayed == 0) {
@@ -638,6 +641,8 @@ function startObservingMoves() {
 
 // Callback function to execute when mutations are observed
 var callback = function(mutations) {
+
+    console.log("callback");
     
     // check if game started
     var hasTheGameAlreadyStarted = hasTheGameStarted();    
@@ -673,6 +678,8 @@ var callback = function(mutations) {
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/D/, 'Q');
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/R/, 'K');
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/T/, 'R');
+        console.log(englishLastMadeMoveString);
+        console.log(chess.fen());
         chess.move(englishLastMadeMoveString);
 
             
@@ -708,44 +715,112 @@ var callback = function(mutations) {
 
 function getPiecesToFEN() {
 
+    console.log(pageType);
+
     var fenPosition = "";
-    for (var i = 8; i >=1; i--) {
-        for (var j = 1; j <=8; j++) {
-            var classNameForPiece = '.square-' + j + i;
-            var pieceDiv = document.querySelector(classNameForPiece+':not(.highlight)');
-            if (pieceDiv) {
-                var listOfClasses = pieceDiv.classList;
-                for (var classInfo in listOfClasses) {
-                    if (listOfClasses[classInfo][0] == "w") {
-                        fenPosition = fenPosition + listOfClasses[classInfo][1].toUpperCase(); 
+    
+    if ((pageType == "analysis") || (pageType == "play")) {
+        console.log("here");
+        for (var i = 8; i >=1; i--) {
+            for (var j = 1; j <=8; j++) {
+                console.log(fenPosition, i, j);
+                var classNameForPiece = '.square-' + j + i;
+                var pieceDiv = document.querySelector(classNameForPiece);
+                if (pieceDiv) {
+                    var listOfClasses = pieceDiv.classList;
+                    for (var classInfo in listOfClasses) {
+                        if (listOfClasses[classInfo][0] == "w") {
+                            fenPosition = fenPosition + listOfClasses[classInfo][1].toUpperCase(); 
+                        }
+                        else if (listOfClasses[classInfo][0] == "b") {
+                            fenPosition = fenPosition + listOfClasses[classInfo][1].toLowerCase(); 
+                        }
+                        else if (listOfClasses[classInfo] == "highlight") {
+                            if (j > 1){
+                                if (!isNaN(fenPosition[fenPosition.length -1])) {
+                                    var referenceNumber = fenPosition[fenPosition.length -1];
+                                    console.log(referenceNumber);
+                                    var newNumber = parseInt(referenceNumber) + 1;
+                                    fenPosition = fenPosition.slice(0, -1);
+                                    fenPosition = fenPosition + newNumber;
+                                }
+                                else {
+                                    fenPosition = fenPosition + "1";
+                                }
+                            }
+                            else {
+                                fenPosition = fenPosition + "1";
+                            }
+                            
+                        }
                     }
-                    else if (listOfClasses[classInfo][0] == "b") {
-                        fenPosition = fenPosition + listOfClasses[classInfo][1].toLowerCase(); 
-                    }
-                }
-            }
-            else {
-                if (fenPosition == "") {
-                    fenPosition = "1";
-                }
-                else if (!isNaN(fenPosition[fenPosition.length -1])) {
-                    var referenceNumber = fenPosition[fenPosition.length -1];
-                    var newNumber = parseInt(referenceNumber) + 1;
-                    fenPosition = fenPosition.slice(0, -1);
-                    fenPosition = fenPosition + newNumber;
                 }
                 else {
-                    fenPosition = fenPosition + "1";
+                    if (j == 1) {
+                        fenPosition = fenPosition + "1";
+                        console.log("j=1");
+                    }
+                    else if (!isNaN(fenPosition[fenPosition.length -1])) {
+                        var referenceNumber = fenPosition[fenPosition.length -1];
+                        console.log(referenceNumber);
+                        var newNumber = parseInt(referenceNumber) + 1;
+                        fenPosition = fenPosition.slice(0, -1);
+                        fenPosition = fenPosition + newNumber;
+                    }
+                    else {
+                        fenPosition = fenPosition + "1";
+                    }
+                    
                 }
                 
-            }
-            
-        } 
-        fenPosition = fenPosition + "/";
+            } 
+            fenPosition = fenPosition + "/";
+        }
+        var playerColor = getPlayerColor();
+        fenPosition = fenPosition.slice(0, -1);
+        fenPosition = fenPosition + " " + playerColor + " KQkq - 0 1";
+    
     }
-    var playerColor = getPlayerColor();
-    fenPosition = fenPosition.slice(0, -1);
-    fenPosition = fenPosition + " " + playerColor + " KQkq - 0 1";
+    else {
+        for (var i = 8; i >=1; i--) {
+            for (var j = 1; j <=8; j++) {
+                var classNameForPiece = '.square-0' + j + "0" + i;
+                var pieceDiv = document.querySelector(classNameForPiece);
+                if (pieceDiv) {
+                    var listOfClasses = pieceDiv.classList;
+                    for (var classInfo in listOfClasses) {
+                        if (listOfClasses[classInfo][0] == "w") {
+                            fenPosition = fenPosition + listOfClasses[classInfo][1].toUpperCase(); 
+                        }
+                        else if (listOfClasses[classInfo][0] == "b") {
+                            fenPosition = fenPosition + listOfClasses[classInfo][1].toLowerCase(); 
+                        }
+                    }
+                }
+                else {
+                    if (j == 1) {
+                        fenPosition = fenPosition + "1";
+                    }
+                    else if (!isNaN(fenPosition[fenPosition.length -1])) {
+                        var referenceNumber = fenPosition[fenPosition.length -1];
+                        var newNumber = parseInt(referenceNumber) + 1;
+                        fenPosition = fenPosition.slice(0, -1);
+                        fenPosition = fenPosition + newNumber;
+                    }
+                    else {
+                        fenPosition = fenPosition + "1";
+                    }
+                    
+                }
+                
+            } 
+            fenPosition = fenPosition + "/";
+        }
+        var playerColor = getPlayerColor();
+        fenPosition = fenPosition.slice(0, -1);
+        fenPosition = fenPosition + " " + playerColor + " KQkq - 0 1";
+    
+    }
     
     return fenPosition;
 } 
@@ -768,10 +843,12 @@ function enableFreedomMode() {
 
     // get starting fen
     var fenPosition = getPiecesToFEN();
+    console.log(fenPosition);
     
     // Start chessboard to follow the game on background
     window['chess'] = new Chess(fenPosition);
-
+    console.log(chess.fen());
+    
     // check if game started
     var hasTheGameAlreadyStarted = hasTheGameStarted();
     
