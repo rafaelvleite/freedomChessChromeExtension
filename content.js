@@ -573,7 +573,6 @@ function makeMove(source, destination) {
 function startObservingMoves() {
 
     var movesPlayed = getMovesCount();
-    console.log(movesPlayed);
             
     // in case we just started a game as black and expecting opponent to play
     if(movesPlayed == 0) {
@@ -678,9 +677,9 @@ var callback = function(mutations) {
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/D/, 'Q');
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/R/, 'K');
         englishLastMadeMoveString = englishLastMadeMoveString.replace(/T/, 'R');
-        console.log(englishLastMadeMoveString);
-        console.log(chess.fen());
-        chess.move(englishLastMadeMoveString);
+        //console.log(englishLastMadeMoveString);
+        //console.log(chess.fen());
+        //chess.move(englishLastMadeMoveString);
 
             
         // make the alert that move has been played
@@ -715,21 +714,16 @@ var callback = function(mutations) {
 
 function getPiecesToFEN() {
 
-    console.log(pageType);
-
     var fenPosition = "";
     
-    
-    console.log("here");
     for (var i = 8; i >=1; i--) {
         for (var j = 1; j <=8; j++) {
             if ((pageType == "analysis") || (pageType == "play")) {
-                var classNameForPiece = '.square-' + j + i;
+                var classNameForPiece = '.piece.square-' + j + i;
             }
             else {
-                var classNameForPiece = '.square-0' + j + "0" + i;
+                var classNameForPiece = 'piece.square-0' + j + "0" + i;
             }
-            
             var pieceDiv = document.querySelector(classNameForPiece);
             if (pieceDiv) {
                 var listOfClasses = pieceDiv.classList;
@@ -740,50 +734,37 @@ function getPiecesToFEN() {
                     else if (listOfClasses[classInfo][0] == "b") {
                         fenPosition = fenPosition + listOfClasses[classInfo][1].toLowerCase(); 
                     }
-                    else if (listOfClasses[classInfo] == "highlight") {
-                        if (j > 1){
-                            if (!isNaN(fenPosition[fenPosition.length -1])) {
-                                var referenceNumber = fenPosition[fenPosition.length -1];
-                                console.log(referenceNumber);
-                                var newNumber = parseInt(referenceNumber) + 1;
-                                fenPosition = fenPosition.slice(0, -1);
-                                fenPosition = fenPosition + newNumber;
-                            }
-                            else {
-                                fenPosition = fenPosition + "1";
-                            }
-                        }
-                        else {
-                            fenPosition = fenPosition + "1";
-                        }
-                        
-                    }
                 }
             }
             else {
                 if (j == 1) {
                     fenPosition = fenPosition + "1";
-                    console.log("j=1");
                 }
                 else if (!isNaN(fenPosition[fenPosition.length -1])) {
                     var referenceNumber = fenPosition[fenPosition.length -1];
-                    console.log(referenceNumber);
                     var newNumber = parseInt(referenceNumber) + 1;
                     fenPosition = fenPosition.slice(0, -1);
                     fenPosition = fenPosition + newNumber;
                 }
                 else {
                     fenPosition = fenPosition + "1";
-                }
-                
+                } 
             }
-            
         } 
         fenPosition = fenPosition + "/";
     }
-    var playerColor = getPlayerColor();
+    
+    var movesPlayed = getMovesCount();
+    
+    if (movesPlayed %2 == 0) {
+        var playerTurn = "w";
+    }
+    else {
+        var playerTurn = "b";
+    }
+    
     fenPosition = fenPosition.slice(0, -1);
-    fenPosition = fenPosition + " " + playerColor + " KQkq - 0 1";
+    fenPosition = fenPosition + " " + playerTurn + " KQkq - 0 1";
     
     return fenPosition;
 } 
@@ -810,7 +791,6 @@ function enableFreedomMode() {
     
     // Start chessboard to follow the game on background
     window['chess'] = new Chess(fenPosition);
-    console.log(chess.fen());
     
     // check if game started
     var hasTheGameAlreadyStarted = hasTheGameStarted();
@@ -821,7 +801,6 @@ function enableFreedomMode() {
     // welcome message and instructions
     var welcomeMessage = "Modo Freedom Ativado, seja bem-vindo! Se quiser desativar este modo, basta dizer Desativar. Se você for deficiente visual, diga agora 'Sou deficiente visual' para que eu diga em voz alta os lances de seu adversário. Boa partida!"
     speech.text = welcomeMessage;
-    console.log(speech);
     window.speechSynthesis.speak(speech);
     
     if ((hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
