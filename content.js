@@ -277,6 +277,40 @@ async function speak(phrase) {
     synth.speak(utterance);
 }
 
+function getUserVoiceInput(cb) {
+    var SpeechRecognition = SpeechRecognition || webkitSpeechRecognition;
+    var SpeechGrammarList = SpeechGrammarList || webkitSpeechGrammarList;
+    var SpeechRecognitionEvent = SpeechRecognitionEvent || webkitSpeechRecognitionEvent;
+
+    var grammar = '#JSGF V1.0; grammar colors; public <color> = b2 | b3;'
+    var recognition = new SpeechRecognition();
+    var speechRecognitionList = new SpeechGrammarList();
+    speechRecognitionList.addFromString(grammar, 1);
+    recognition.grammars = speechRecognitionList;
+    recognition.continuous = true;
+    recognition.lang = 'pt-BR';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.start()
+
+    recognition.addEventListener('result', function (event) {
+        const response = event.results[0][0].transcript;
+
+        recognition.stop();
+
+        cb(null, response);
+    })
+
+    recognition.addEventListener('error', function (event) {
+        const response = event.error;
+
+        recognition.stop();
+
+        cb(response);
+    })
+}
+
 // get the move inputs, validate and check for legal
 async function getTheMoveInputsAndMakeMove() {
     var validateInputs = false;
