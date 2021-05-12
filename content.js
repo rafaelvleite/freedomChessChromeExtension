@@ -79,10 +79,18 @@ window.onload = () =>{
            }
         }, 100); // check every 100ms
     }
-    else if ((pageType == "liveNoGame") || (pageType == "liveGame")){
+    else if (pageType == "liveGame"){
         var checkExist = setInterval(function() {
            if ($('.live-game-buttons-component').length) {
               document.querySelector('.live-game-buttons-component').append(button);
+              clearInterval(checkExist);
+           }
+        }, 100); // check every 100ms
+    }
+    else if (pageType == "liveNoGame"){
+        var checkExist = setInterval(function() {
+           if ($('.game-buttons-component').length) {
+              document.querySelector('.game-buttons-component').append(button);
               clearInterval(checkExist);
            }
         }, 100); // check every 100ms
@@ -281,9 +289,6 @@ recognition.onend = function () {
         recognition.stop();
     }
 };
-
-
-
 
 
 
