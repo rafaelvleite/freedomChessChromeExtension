@@ -176,6 +176,22 @@ window.onload = () =>{
     button.addEventListener("click", function(){
         enableDisableFreedomMode();
     }, false);
+    
+    
+    
+    // Event listeners for daily games
+    window['confirmButtonClicked'] = false;
+    if (pageType == "daily") {
+        window['confirmButton'] = document.querySelector('.ui_v5-button-component.ui_v5-button-primary');
+        var checkButtonExists = setInterval(function() {
+            if () {
+                confirmButton.addEventListener('click', function() {
+                    confirmButtonClicked = true;
+                });
+                clearInterval(checkButtonExists);            
+            }        
+        }, 100); // check every 100ms
+    }    
 
 }
 
@@ -195,7 +211,6 @@ recognition.onresult = function(e) {
       
     if (e.results[0].isFinal) {
     
-        console.log(text);
     
         // ativar voz para lances do adversário
         if (text.includes("deficiente visual")) {
@@ -253,17 +268,19 @@ recognition.onresult = function(e) {
             text = text.replace(/rainha /i, "Dama ");
             
             var legalMoves = chess.moves();
-            console.log(legalMoves);
             legalMoves = legalMoves.map(function(x){return x.replace(/N/, 'Cavalo ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/R/, 'Torre ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/K/, 'Rei ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/Q/, 'Dama ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/B/, 'Bispo ');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/x/, ' por ');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/x/, 'por ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/O-O-O/, 'Grande roque');});
             legalMoves = legalMoves.map(function(x){return x.replace(/O-O/, 'Roque');});
             
-            
+            console.log(text);
+            console.log(legalMoves);
+
+
           
             var bestMove = "";
             var similarityReference = 0;
@@ -278,8 +295,11 @@ recognition.onresult = function(e) {
             var indexForBestMove = legalMoves.indexOf(bestMove);
             legalMoves = chess.moves();
             var chosenMove = legalMoves[indexForBestMove];
-        
+                
             if (similarityReference >= 0.6) {
+                //console.log(text);
+                //console.log(chosenMove); 
+                //console.log(similarityReference); 
                 chess.move(chosenMove);
                 var movesHistory = chess.history({ verbose: true });
                 var lastHistoryMove = movesHistory[movesHistory.length -1];
@@ -549,7 +569,6 @@ function makeMove(source, destination) {
     // get player color
     var playerColor = getPlayerColor();
     
-    
     // get board to get screen position and offsets and also square width
     const gameBoard = document.querySelector('.board');
     const offsetX = gameBoard.getBoundingClientRect().x;
@@ -698,14 +717,34 @@ var callback = function(mutations) {
         spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/O-O/, "Roque ");
         spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/x/, " por ");
         
-        // make move on background
-        var englishLastMadeMoveString = lastMoveMadeString.replace(/C/, 'N');
-        englishLastMadeMoveString = englishLastMadeMoveString.replace(/D/, 'Q');
-        englishLastMadeMoveString = englishLastMadeMoveString.replace(/R/, 'K');
-        englishLastMadeMoveString = englishLastMadeMoveString.replace(/T/, 'R');
-        console.log(englishLastMadeMoveString);
-        console.log(chess.fen());
-        chess.move(englishLastMadeMoveString);
+        var makeTheMove = false;
+        
+        if (pageType == 'daily') {
+            var checkButtonClicked = setInterval(function() {
+                if (confirmButtonClicked == true) {
+                    makeTheMove = true;
+                    clearInterval(checkButtonClicked);
+                    confirmButtonClicked = false;
+                }
+                else {
+                    makeTheMove = false;
+                }
+            }, 100); // check every 100ms
+        }
+        else {
+            makeTheMove = true;
+        }
+        
+        if (makeTheMove == true) {
+            // make move on background
+            var englishLastMadeMoveString = lastMoveMadeString.replace(/C/, 'N');
+            englishLastMadeMoveString = englishLastMadeMoveString.replace(/D/, 'Q');
+            englishLastMadeMoveString = englishLastMadeMoveString.replace(/R/, 'K');
+            englishLastMadeMoveString = englishLastMadeMoveString.replace(/T/, 'R');
+            console.log(englishLastMadeMoveString);
+            console.log(chess.fen());
+            chess.move(englishLastMadeMoveString);
+        }
 
             
         // make the alert that move has been played
@@ -826,7 +865,8 @@ function enableFreedomMode() {
     var isTheGameOver = isGameOver();
     
     // welcome message and instructions
-    var welcomeMessage = "Modo Freedom Ativado, seja bem-vindo! Se quiser desativar este modo, basta dizer Desativar. Se você for deficiente visual, diga agora 'Sou deficiente visual' para que eu diga em voz alta os lances de seu adversário. Boa partida!"
+    var welcomeMessage = "Modo Freedom Ativado, basta dizer os lances para jogar. Se você for deficiente visual, diga 'Sou deficiente visual' para que eu diga em voz alta os lances de seu adversário. Boa partida!"
+    
     speech.text = welcomeMessage;
     window.speechSynthesis.speak(speech);
     
