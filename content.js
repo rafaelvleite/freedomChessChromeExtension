@@ -268,6 +268,7 @@ recognition.onresult = function(e) {
             legalMoves = legalMoves.map(function(x){return x.replace(/x/, 'por ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/O-O-O/, 'Grande roque');});
             legalMoves = legalMoves.map(function(x){return x.replace(/O-O/, 'Roque');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/\+/g, '');});
             
             console.log("Modificado: " + text);
             console.log(legalMoves);
@@ -291,7 +292,7 @@ recognition.onresult = function(e) {
             if (similarityReference >= 0.6) {
                 //console.log(text);
                 //console.log(chosenMove); 
-                //console.log(similarityReference); 
+                console.log(similarityReference); 
                 chess.move(chosenMove);
                 var movesHistory = chess.history({ verbose: true });
                 var lastHistoryMove = movesHistory[movesHistory.length -1];
