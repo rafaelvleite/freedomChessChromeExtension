@@ -177,21 +177,6 @@ window.onload = () =>{
         enableDisableFreedomMode();
     }, false);
     
-    
-    
-    // Event listeners for daily games
-    window['confirmButtonClicked'] = false;
-    if (pageType == "daily") {
-        window['confirmButton'] = document.querySelector('.ui_v5-button-component.ui_v5-button-primary');
-        var checkButtonExists = setInterval(function() {
-            if () {
-                confirmButton.addEventListener('click', function() {
-                    confirmButtonClicked = true;
-                });
-                clearInterval(checkButtonExists);            
-            }        
-        }, 100); // check every 100ms
-    }    
 
 }
 
@@ -211,6 +196,7 @@ recognition.onresult = function(e) {
       
     if (e.results[0].isFinal) {
     
+        console.log("Original: " + text);
     
         // ativar voz para lances do adversário
         if (text.includes("deficiente visual")) {
@@ -221,6 +207,12 @@ recognition.onresult = function(e) {
         }
         else if (text.includes("desativar")) {
             enableDisableFreedomMode();
+        }
+        else if ((text.includes("confirmar")) && (pageType == "daily")) {
+            document.querySelector('.ui_v5-button-component.ui_v5-button-primary').click();
+        }
+        else if ((text.includes("cancelar")) && (pageType == "daily")) {
+            document.querySelector('.ui_v5-button-component.ui_v5-button-basic').click();
         }
         else {
         
@@ -277,7 +269,7 @@ recognition.onresult = function(e) {
             legalMoves = legalMoves.map(function(x){return x.replace(/O-O-O/, 'Grande roque');});
             legalMoves = legalMoves.map(function(x){return x.replace(/O-O/, 'Roque');});
             
-            console.log(text);
+            console.log("Modificado: " + text);
             console.log(legalMoves);
 
 
@@ -686,7 +678,7 @@ function startObservingMoves() {
 // Callback function to execute when mutations are observed
 var callback = function(mutations) {
 
-    console.log("callback");
+    // console.log("callback");
     
     // check if game started
     var hasTheGameAlreadyStarted = hasTheGameStarted();    
@@ -783,7 +775,7 @@ function getPiecesToFEN() {
     
     for (var i = 8; i >=1; i--) {
         for (var j = 1; j <=8; j++) {
-            console.log(fenPosition);
+            // console.log(fenPosition);
             if ((pageType == "analysis") || (pageType == "play") || (pageType == "daily") || (pageType == "liveGame")) {
                 var classNameForPiece = '.piece.square-' + j + i;
             }
@@ -841,6 +833,25 @@ function enableFreedomMode() {
 
     // enableMouseCoordinatesDebug();
     
+    // Event listeners for daily games
+    window['confirmButtonClicked'] = false;
+    if (pageType == "daily") {
+        var checkButtonExists = setInterval(function() {    
+            if (document.querySelector('.ui_v5-button-component.ui_v5-button-primary') !== null) {
+                window['confirmButton'] = document.querySelector('.ui_v5-button-component.ui_v5-button-primary');
+                window['cancelButton'] = document.querySelector('.ui_v5-button-component.ui_v5-button-basic');
+                confirmButton.addEventListener('click', function() {
+                    confirmButtonClicked = true;
+                });
+                clearInterval(checkButtonExists);            
+            }   
+            else{
+            
+            }     
+        }, 100); // check every 100ms
+    }    
+    
+    
     // Text to Speech
     window['speech'] = new SpeechSynthesisUtterance();
     speech.lang = "pt-BR";
@@ -853,7 +864,7 @@ function enableFreedomMode() {
 
     // get starting fen
     var fenPosition = getPiecesToFEN();
-    console.log(fenPosition);
+    // console.log(fenPosition);
     
     // Start chessboard to follow the game on background
     window['chess'] = new Chess(fenPosition);
@@ -867,8 +878,8 @@ function enableFreedomMode() {
     // welcome message and instructions
     var welcomeMessage = "Modo Freedom Ativado, basta dizer os lances para jogar. Se você for deficiente visual, diga 'Sou deficiente visual' para que eu diga em voz alta os lances de seu adversário. Boa partida!"
     
-    speech.text = welcomeMessage;
-    window.speechSynthesis.speak(speech);
+    // speech.text = welcomeMessage;
+    // window.speechSynthesis.speak(speech);
     
     if ((hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
     
