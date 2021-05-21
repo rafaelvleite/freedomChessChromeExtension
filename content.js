@@ -214,6 +214,25 @@ recognition.onresult = function(e) {
         else if ((text.includes("cancelar")) && (pageType == "daily")) {
             document.querySelector('.ui_v5-button-component.ui_v5-button-basic').click();
         }
+        else if ((text.includes("dama")) && (window['promotionQueen'] != null)) {
+            window['promotionQueen'].click();
+        }
+        else if ((text.includes("bispo")) && (window['promotionBishop'] != null)) {
+            window['promotionBishop'].click();
+        }
+        else if ((text.includes("cavalo")) && (window['promotionKnight'] != null)) {
+            window['promotionKnight'].click();
+        }
+        else if ((text.includes("torre")) && (window['promotionRook'] != null)) {
+            window['promotionRook'].click();
+        }
+        else if ((text.includes("cancelar")) && (document.querySelector('.promotion-window'))) {
+            console.log("Cancelaaaaar");
+            chess.undo();
+            console.log(document.querySelector('.close-button'));
+            document.querySelector('.close-button').click();
+        } 
+        
         else {
         
             // remove spaces if only square for pawn move
@@ -221,15 +240,7 @@ recognition.onresult = function(e) {
                 text = text.replace(/ +/g, "");
             }
             
-            // replace text for numbers
-            text = text.replace(/ um/, "1");
-            text = text.replace(/ dois/, "2");
-            text = text.replace(/ três/, "3");
-            text = text.replace(/ quatro/, "4");
-            text = text.replace(/ cinco/, "5");
-            text = text.replace(/ seis/, "6");
-            text = text.replace(/ sete/, "7");
-            text = text.replace(/ oito/, "8");
+            // Roque
             text = text.replace(/rock/, "roque");
             
             // replace for column C
@@ -249,32 +260,89 @@ recognition.onresult = function(e) {
             text = text.replace(/68/, "c8");
             
             // replace for column D
-            text = text.replace(/ de /, " d");
-            
+            text = text.replace(/ de /, " d ");
+            text = text.replace(/depor /, "d por ");
+            text = text.replace(/depois /, "d por ");
             
             // replace for column F
             text = text.replace(/cavalete/, "Cavalo f");
             
+            // replace for column B
+            text = text.replace(/^Bê/, "b");
+            
+            // replace for column C
+            text = text.replace(/^se /, "c ");
+            
             
             // replace Rainha for Dama
             text = text.replace(/rainha /i, "Dama ");
+            text = text.replace(/deu uma /i, "Dama ");
             
+           
+            // replace text for numbers
+            text = text.replace(/ um/, "1");
+            text = text.replace(/ dois/, "2");
+            text = text.replace(/ três/, "3");
+            text = text.replace(/ quatro/, "4");
+            text = text.replace(/ cinco/, "5");
+            text = text.replace(/ seis/, "6");
+            text = text.replace(/ sete/, "7");
+            text = text.replace(/ oito/, "8");
+            
+            // replace caps for lower for columns
+            if (text.match(/[A-Z]+\d/g)) {
+                let myRegexp = /[A-Z]+\d/g;
+                let match = myRegexp.exec(text);
+                text = text.replace(match[0], match[0].toLowerCase());
+            }
+            
+            // replace lower for caps for pieces
+            text = text.replace(/dama/, "Dama");
+            text = text.replace(/rainha/, "Dama");
+            text = text.replace(/torre/, "Torre");
+            text = text.replace(/cavalo/, "Cavalo");
+            text = text.replace(/bispo/, "Bispo");
+            text = text.replace(/rei/, "Rei");
+            
+            
+            // remove space between column and row
+            if (text.match(/[a-zA-Z]+\s\d/g)) {
+                let myRegexp = /[a-zA-Z]+\s\d/g;
+                let match = myRegexp.exec(text);
+                let alteredText = match[0].replace(/\s+/g, "");
+                text = text.replace(match[0], alteredText);
+            }
+            
+            // remove - between column and row
+            if (text.match(/[a-zA-Z]+\-\d/g)) {
+                let myRegexp = /[a-zA-Z]+\-\d/g;
+                let match = myRegexp.exec(text);
+                let alteredText = match[0].replace(/\-/g, "");
+                text = text.replace(match[0], alteredText);
+            }
+            
+            
+
             var legalMoves = chess.moves();
             legalMoves = legalMoves.map(function(x){return x.replace(/N/, 'Cavalo ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/R/, 'Torre ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/K/, 'Rei ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/Q/, 'Dama ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/B/, 'Bispo ');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/x/, 'por ');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/x/, ' por ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/O-O-O/, 'Grande roque');});
             legalMoves = legalMoves.map(function(x){return x.replace(/O-O/, 'Roque');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/#/, '');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/=/, ' ');});
             legalMoves = legalMoves.map(function(x){return x.replace(/\+/g, '');});
+            legalMoves = legalMoves.map(function(x){return x.replace(/  +/g, ' ');});
+            legalMoves = legalMoves.map(function(x){return x.trim();});
+            
             
             console.log("Modificado: " + text);
             console.log(legalMoves);
 
 
-          
             var bestMove = "";
             var similarityReference = 0;
             
@@ -289,7 +357,7 @@ recognition.onresult = function(e) {
             legalMoves = chess.moves();
             var chosenMove = legalMoves[indexForBestMove];
                 
-            if (similarityReference >= 0.6) {
+            if (similarityReference >= 0.9) {
                 //console.log(text);
                 //console.log(chosenMove); 
                 console.log(similarityReference); 
@@ -304,17 +372,17 @@ recognition.onresult = function(e) {
             else {
                 //console.log(text);
                 //console.log(chosenMove); 
-                //console.log(similarityReference); 
+                console.log(similarityReference); 
                 //console.log(chess.fen());
                 // play beep sound
                 // Play beep
-                let context = new (window.AudioContext || window.webkitAudioContext)();
-                var osc = context.createOscillator(); // instantiate an oscillator
-                osc.type = 'sine'; // this is the default - also square, sawtooth, triangle
-                osc.frequency.value = 440; // Hz
-                osc.connect(context.destination); // connect it to the destination
-                osc.start(); // start the oscillator
-                osc.stop(context.currentTime + 0.5); // stop 2 seconds after the current time
+                //let context = new (window.AudioContext || window.webkitAudioContext)();
+                //var osc = context.createOscillator(); // instantiate an oscillator
+                //osc.type = 'sine'; // this is the default - also square, sawtooth, triangle
+                //osc.frequency.value = 440; // Hz
+                //osc.connect(context.destination); // connect it to the destination
+                //osc.start(); // start the oscillator
+                // osc.stop(context.currentTime + 0.5); // stop 2 seconds after the current time
             } 
         } 
     }
@@ -851,6 +919,33 @@ function enableFreedomMode() {
             }     
         }, 100); // check every 100ms
     }    
+    
+    // Event listeners for promotion
+    var checkPromotionWindowExists = setInterval(function() {    
+        if (document.querySelector('.promotion-window') !== null) {
+            var divButtons = document.querySelectorAll('.promotion-piece');
+            console.log(divButtons);
+            for (var i=0, max=divButtons.length; i < max; i++) {
+                console.log(divButtons[i].classList);
+                if (divButtons[i].classList.contains('bb') || divButtons[i].classList.contains('wb')) {
+                    window['promotionBishop'] = divButtons[i]
+                }
+                else if (divButtons[i].classList.contains('bn') || divButtons[i].classList.contains('wn')) {
+                    window['promotionKnight'] = divButtons[i]
+                }
+                else if (divButtons[i].classList.contains('bq') || divButtons[i].classList.contains('wq')) {
+                    window['promotionQueen'] = divButtons[i]
+                }
+                else if (divButtons[i].classList.contains('br') || divButtons[i].classList.contains('wr')) {
+                    window['promotionRook'] = divButtons[i]
+                }
+            }
+            clearInterval(checkPromotionWindowExists);            
+        }   
+        else{
+        
+        }     
+    }, 100); // check every 100ms
     
     
     // Text to Speech
