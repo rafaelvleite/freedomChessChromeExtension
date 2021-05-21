@@ -1,900 +1,56 @@
 // https://medium.com/swlh/programming-a-chess-bot-for-chess-com-fa6bd7e1da76
 // references for speech: https://codepen.io/Web_Cifar/pen/jOqBEjE and https://codeburst.io/html5-speech-recognition-api-670846a50e92
-
+// string similarity: https://medium.com/@sumn2u/string-similarity-comparision-in-js-with-examples-4bae35f13968
 
 window.onload = () =>{
 
-    // start chess board for background
+    // import scripts
     'use strict';
+    const head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
     const script = document.createElement('script');
     script.setAttribute("type", "module");
-    script.setAttribute("src", chrome.extension.getURL('thirdParty/chess.js/chess.js'));
-    const head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+
+    // get string similarity functions
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/stringsSimilarity.js'));
+    head.insertBefore(script, head.lastChild);
+    
+    // get speech recognition functions
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/speechRecognition.js'));
     head.insertBefore(script, head.lastChild);
 
-    // get classes for elements for functions on different pages
-    window['currentUrl'] = window.location.href;
-    
-    // Observe behavior for analysis mode
-    if (currentUrl.includes("analysis")){
-        window['movesListBoxClass'] = '.move-list.horizontal-move-list';
-        window['moveNodeClass'] = '.move-node';
-        window['pageType'] = "analysis";
-    }
-    // Observe behavior for play mode
-    else if (currentUrl.includes("play")){
-        window['movesListBoxClass'] = '.layout-move-list.vertical-move-list';
-        window['moveNodeClass'] = '.move';
-        window['pageType'] = "play";
-    }
-    // Observe behavior for daily play mode
-    else if (currentUrl.includes("daily")){
-        window['movesListBoxClass'] = '.move-list-move-list.vertical-move-list';
-        window['moveNodeClass'] = '.move';
-        window['pageType'] = "daily";
-    }
-    // Observe behavior for live game mode
-    else if ((currentUrl.includes("live")) && (!currentUrl.includes("game"))){
-        window['movesListBoxClass'] = '.vertical-move-list-component';
-        window['moveNodeClass'] = '.vertical-move-list-notation-vertical';
-        window['pageType'] = "liveNoGame";
-    }
-    // Observe behavior for live game mode
-    else if ((currentUrl.includes("live")) && (currentUrl.includes("game"))){
-        window['movesListBoxClass'] = '.move-list-move-list.vertical-move-list';
-        window['moveNodeClass'] = '.move';
-        window['pageType'] = "liveGame";
-    }
-    
+    // start chess board for background
+    script.setAttribute("src", chrome.extension.getURL('thirdParty/chess.js/chess.js'));
+    head.insertBefore(script, head.lastChild);
     
     // Create button for enabling Freedom Mode
-    const button = document.createElement('button');
-    var buttonImageUrl = chrome.runtime.getURL('images/speech-icon.png');
-    button.id = "freedomButton";
-    button.className = "freedomButtonClass";
-    button.innerHTML = '<img src="' + buttonImageUrl + '" style="width:30px; float:left; margin-left: -20%;" />';
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/createFreedomModeButton.js'));
+    head.insertBefore(script, head.lastChild);
     
-    if (pageType == "play") {
-        var checkExist = setInterval(function() {
-           if ($('.secondary-controls-left.secondary-controls-group').length) {
-              document.querySelector('.secondary-controls-left.secondary-controls-group').append(button);
-              clearInterval(checkExist);
-           }
-        }, 100); // check every 100ms
+    // enable/disable Freedom Mode
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/enableDisableFreedomMode.js'));
+    head.insertBefore(script, head.lastChild);
     
-    }
-    else if (pageType == "analysis"){
-        var checkExist = setInterval(function() {
-           if ($('.secondary-controls-component').length) {
-              document.querySelector('.secondary-controls-component').append(button);
-              clearInterval(checkExist);
-           }
-        }, 100); // check every 100ms
-    }
-    else if (pageType == "daily"){
-        var checkExist = setInterval(function() {
-           if ($('.daily-game-footer-middle').length) {
-              document.querySelector('.daily-game-footer-middle').append(button);
-              clearInterval(checkExist);
-           }
-        }, 100); // check every 100ms
-    }
-    else if (pageType == "liveGame"){
-        var checkExist = setInterval(function() {
-           if ($('.live-game-buttons-component').length) {
-              document.querySelector('.live-game-buttons-component').append(button);
-              clearInterval(checkExist);
-           }
-        }, 100); // check every 100ms
-    }
-    else if (pageType == "liveNoGame"){
-        var checkExist = setInterval(function() {
-           if ($('.game-buttons-component').length) {
-              document.querySelector('.game-buttons-component').append(button);
-              clearInterval(checkExist);
-           }
-        }, 100); // check every 100ms
-    }
+    // get board pieces and create FEN position
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/getPiecesToFenPosition.js'));
+    head.insertBefore(script, head.lastChild);
     
+    // get board pieces and create FEN position
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/getPiecesToFenPosition.js'));
+    head.insertBefore(script, head.lastChild);
     
+    // get classes for elements for functions on different pages and also get pagetypes from url
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/classesMappingChessCom.js'));
+    head.insertBefore(script, head.lastChild);
+    
+    // get observers and callbacks for screen mutations
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/observersAndCallbacks.js'));
+    head.insertBefore(script, head.lastChild);
 
-    // Create an observer instance linked to the callback function
-    window['freedomEnabled'] = false;
-    window['observer'] = new MutationObserver(callback);
-    
-    window['confirm'] = function(question, text, confirmButtonText, callback) {
-        Swal.fire({
-              title: question,
-              imageUrl: chrome.runtime.getURL('images/freedomChess.png'),
-              imageHeight: 100,
-              imageAlt: 'Freedom Logo',
-              text: text,
-              showCancelButton: true,
-              confirmButtonColor: '#3085d6',
-              cancelButtonColor: '#d33',
-              confirmButtonText: confirmButtonText,
-        }).then((confirmed) => {
-            callback(confirmed && confirmed.value == true);
-        });
-    }
-    
-    // switch enable/disable Freedom Mode
-    window['enableDisableFreedomMode'] = function() {
-        
-        if (freedomEnabled == false) {
-        
-            var question = 'Você deseja ativar o Modo Freedom?';
-            var text = "Você passará a falar os lances ao invés de usar o mouse.";
-            var confirmButtonText = 'Sim, ative!';
-            
-            confirm(question, text, confirmButtonText, function (confirmed) {
-                if (confirmed) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: "Ativado!",
-                        text: "O modo Freedom está ativo.",
-                        showConfirmButton: false,
-                        timer: 1500
-                    });
-                    setTimeout(function(){ 
-                        enableFreedomMode();
-                    }, 2000);
-                    freedomEnabled = true;
-                }
-                else {
-                    freedomEnabled = false;
-                }
-            });
-        }
-                
-        else if (freedomEnabled == true) {
-            question = 'Você deseja desativar o Modo Freedom?';
-            text = "Você passará a fazer os lances com o mouse normalmente.";
-            confirmButtonText = 'Sim, desative!';
-            
-            confirm(question, text, confirmButtonText, function (confirmed) {
-                if (confirmed) {
-                    observer.disconnect(); 
-                    Swal.fire({
-                        icon: 'success',
-                        title: "Destivado!",
-                        text: "O modo Freedom foi desativado.",
-                        showConfirmButton: false,
-                        timer: 1500
-                    });
-                    freedomEnabled = false;
-                }
-                else {
-                    freedomEnabled = true;
-                }
-            });
-        }
-        return;
-    }
-    
-    // button click behavior
-    button.addEventListener("click", function(){
-        enableDisableFreedomMode();
-    }, false);
-    
+    // get functions related to the move itself
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/moveFunctions.js'));
+    head.insertBefore(script, head.lastChild);
 
 }
-
-
-// Speech Recognition
-window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-window['recognition'] = new SpeechRecognition();
-recognition.interimResults = true;
-recognition.lang = 'pt-BR';
-
-recognition.onresult = function(e) {
-    
-    var text = Array.from(e.results)
-      .map((result) => result[0])
-      .map((result) => result.transcript)
-      .join("");
-      
-    if (e.results[0].isFinal) {
-    
-        console.log("Original: " + text);
-    
-        // ativar voz para lances do adversário
-        if (text.includes("deficiente visual")) {
-            window['deficienteVisual'] = true;
-            var deficienteVisualMessage = "Modo para Deficiencia Visual Ativado!"
-            speech.text = deficienteVisualMessage;
-            window.speechSynthesis.speak(speech);
-        }
-        else if (text.includes("desativar")) {
-            enableDisableFreedomMode();
-        }
-        else if ((text.includes("confirmar")) && (pageType == "daily")) {
-            document.querySelector('.ui_v5-button-component.ui_v5-button-primary').click();
-        }
-        else if ((text.includes("cancelar")) && (pageType == "daily")) {
-            document.querySelector('.ui_v5-button-component.ui_v5-button-basic').click();
-        }
-        else if ((text.includes("dama")) && (window['promotionQueen'] != null)) {
-            window['promotionQueen'].click();
-        }
-        else if ((text.includes("bispo")) && (window['promotionBishop'] != null)) {
-            window['promotionBishop'].click();
-        }
-        else if ((text.includes("cavalo")) && (window['promotionKnight'] != null)) {
-            window['promotionKnight'].click();
-        }
-        else if ((text.includes("torre")) && (window['promotionRook'] != null)) {
-            window['promotionRook'].click();
-        }
-        else if ((text.includes("cancelar")) && (document.querySelector('.promotion-window'))) {
-            console.log("Cancelaaaaar");
-            chess.undo();
-            console.log(document.querySelector('.close-button'));
-            document.querySelector('.close-button').click();
-        } 
-        
-        else {
-        
-            // remove spaces if only square for pawn move
-            if (text.length <= 3) {
-                text = text.replace(/ +/g, "");
-            }
-            
-            // Roque
-            text = text.replace(/rock/, "roque");
-            
-            // replace for column C
-            text = text.replace(/cavalos e /i, "Cavalo c ");
-            text = text.replace(/torres e /i, "Torre c ");
-            text = text.replace(/bispos e /i, "Bispo c ");
-            text = text.replace(/damas e /i, "Dama c ");
-            text = text.replace(/rainhas e /i, "Dama c ");
-            text = text.replace(/reis e /i, "Rei c ");
-            text = text.replace(/61/, "c1");
-            text = text.replace(/62/, "c2");
-            text = text.replace(/63/, "c3");
-            text = text.replace(/64/, "c4");
-            text = text.replace(/65/, "c5");
-            text = text.replace(/66/, "c6");
-            text = text.replace(/67/, "c7");
-            text = text.replace(/68/, "c8");
-            
-            // replace for column D
-            text = text.replace(/ de /, " d ");
-            text = text.replace(/depor /, "d por ");
-            text = text.replace(/depois /, "d por ");
-            
-            // replace for column F
-            text = text.replace(/cavalete/, "Cavalo f");
-            
-            // replace for column B
-            text = text.replace(/^Bê/, "b");
-            
-            // replace for column C
-            text = text.replace(/^se /, "c ");
-            
-            
-            // replace Rainha for Dama
-            text = text.replace(/rainha /i, "Dama ");
-            text = text.replace(/deu uma /i, "Dama ");
-            
-           
-            // replace text for numbers
-            text = text.replace(/ um/, "1");
-            text = text.replace(/ dois/, "2");
-            text = text.replace(/ três/, "3");
-            text = text.replace(/ quatro/, "4");
-            text = text.replace(/ cinco/, "5");
-            text = text.replace(/ seis/, "6");
-            text = text.replace(/ sete/, "7");
-            text = text.replace(/ oito/, "8");
-            
-            // replace caps for lower for columns
-            if (text.match(/[A-Z]+\d/g)) {
-                let myRegexp = /[A-Z]+\d/g;
-                let match = myRegexp.exec(text);
-                text = text.replace(match[0], match[0].toLowerCase());
-            }
-            
-            // replace lower for caps for pieces
-            text = text.replace(/dama/, "Dama");
-            text = text.replace(/rainha/, "Dama");
-            text = text.replace(/torre/, "Torre");
-            text = text.replace(/cavalo/, "Cavalo");
-            text = text.replace(/bispo/, "Bispo");
-            text = text.replace(/rei/, "Rei");
-            
-            
-            // remove space between column and row
-            if (text.match(/[a-zA-Z]+\s\d/g)) {
-                let myRegexp = /[a-zA-Z]+\s\d/g;
-                let match = myRegexp.exec(text);
-                let alteredText = match[0].replace(/\s+/g, "");
-                text = text.replace(match[0], alteredText);
-            }
-            
-            // remove - between column and row
-            if (text.match(/[a-zA-Z]+\-\d/g)) {
-                let myRegexp = /[a-zA-Z]+\-\d/g;
-                let match = myRegexp.exec(text);
-                let alteredText = match[0].replace(/\-/g, "");
-                text = text.replace(match[0], alteredText);
-            }
-            
-            
-
-            var legalMoves = chess.moves();
-            legalMoves = legalMoves.map(function(x){return x.replace(/N/, 'Cavalo ');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/R/, 'Torre ');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/K/, 'Rei ');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/Q/, 'Dama ');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/B/, 'Bispo ');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/x/, ' por ');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/O-O-O/, 'Grande roque');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/O-O/, 'Roque');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/#/, '');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/=/, ' ');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/\+/g, '');});
-            legalMoves = legalMoves.map(function(x){return x.replace(/  +/g, ' ');});
-            legalMoves = legalMoves.map(function(x){return x.trim();});
-            
-            
-            console.log("Modificado: " + text);
-            console.log(legalMoves);
-
-
-            var bestMove = "";
-            var similarityReference = 0;
-            
-            for (var move in legalMoves) {
-                var stringsSimilarity = similarity(text, legalMoves[move]);
-                if (stringsSimilarity >= similarityReference) {
-                    similarityReference = stringsSimilarity;
-                    bestMove = legalMoves[move];
-                }
-            }
-            var indexForBestMove = legalMoves.indexOf(bestMove);
-            legalMoves = chess.moves();
-            var chosenMove = legalMoves[indexForBestMove];
-                
-            if (similarityReference >= 0.9) {
-                //console.log(text);
-                //console.log(chosenMove); 
-                console.log(similarityReference); 
-                chess.move(chosenMove);
-                var movesHistory = chess.history({ verbose: true });
-                var lastHistoryMove = movesHistory[movesHistory.length -1];
-                source = lastHistoryMove.from;
-                destination = lastHistoryMove.to;
-                chess.undo();
-                makeMove(source, destination);    
-            }
-            else {
-                //console.log(text);
-                //console.log(chosenMove); 
-                console.log(similarityReference); 
-                //console.log(chess.fen());
-                // play beep sound
-                // Play beep
-                //let context = new (window.AudioContext || window.webkitAudioContext)();
-                //var osc = context.createOscillator(); // instantiate an oscillator
-                //osc.type = 'sine'; // this is the default - also square, sawtooth, triangle
-                //osc.frequency.value = 440; // Hz
-                //osc.connect(context.destination); // connect it to the destination
-                //osc.start(); // start the oscillator
-                // osc.stop(context.currentTime + 0.5); // stop 2 seconds after the current time
-            } 
-        } 
-    }
-};
-
-recognition.onend = function () {
-    if (freedomEnabled == true) {
-        recognition.start();
-    }
-    else {
-        recognition.stop();
-    }
-};
-
-
-
-// Debug for x y coordinates on screen
-function enableMouseCoordinatesDebug() {
-    document.onmousemove = function(e){
-    var x = e.pageX;
-    var y = e.pageY;
-    e.target.title = "X is "+x+" and Y is "+y;
-    };
-}
-
-// see wheter the game has already started or not
-function hasTheGameStarted(){
-    if ((pageType == "liveGame") || (pageType == "liveNoGame")) {
-        if(moveNodeClass.length){
-            return true;
-        }
-        else {
-            return false;
-        }
-    }
-    else {
-        return true;
-    }
-}
-
-
-
-// see wheter the game is over or not
-function isGameOver(){
-    if ($('.game-result').length) {
-        return $('.game-result').text();
-    }
-    else {
-        return false;
-    }
-}
-
-
-
-// See board orientation to get player color
-function getPlayerColor() {
-    const gameBoard = document.querySelector('.board');
-    var gameBoardClasses = gameBoard.className.split(' ');
-    if (gameBoardClasses.includes('flipped')){
-        playerColor = "b";
-    }
-    else{
-        playerColor = "w";
-    }
-    return playerColor;
-}
-
-
-
-// funcões para similaridade de frases por distância de Levenshtein
-function editDistance(s1, s2) {
-  s1 = s1.toLowerCase();
-  s2 = s2.toLowerCase();
-
-  var costs = new Array();
-  for (var i = 0; i <= s1.length; i++) {
-    var lastValue = i;
-    for (var j = 0; j <= s2.length; j++) {
-      if (i == 0)
-        costs[j] = j;
-      else {
-        if (j > 0) {
-          var newValue = costs[j - 1];
-          if (s1.charAt(i - 1) != s2.charAt(j - 1))
-            newValue = Math.min(Math.min(newValue, lastValue),
-              costs[j]) + 1;
-          costs[j - 1] = lastValue;
-          lastValue = newValue;
-        }
-      }
-    }
-    if (i > 0)
-      costs[s2.length] = lastValue;
-  }
-  return costs[s2.length];
-}
-function similarity(s1, s2) {
-  var longer = s1;
-  var shorter = s2;
-  if (s1.length < s2.length) {
-    longer = s2;
-    shorter = s1;
-  }
-  var longerLength = longer.length;
-  if (longerLength == 0) {
-    return 1.0;
-  }
-  return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
-}
-
-
-
-// get moves count
-function getMovesCount(){
-    if (pageType == "analysis"){
-        if (document.querySelector(movesListBoxClass) && document.querySelector(movesListBoxClass).firstChild){
-            var localMovesMadeCount = document.querySelector(movesListBoxClass).childElementCount;
-        }
-        else {
-            var localMovesMadeCount = 0;
-        }
-    }
-    else if (pageType == "play"){
-        if (document.querySelector(movesListBoxClass) && document.querySelector(movesListBoxClass).firstChild){
-            var movesArray = document.querySelectorAll(moveNodeClass);
-            var lastNodeArray = movesArray[movesArray.length - 1].childNodes;
-            var localMovesMadeCount = ((movesArray.length) * 2);
-            if (lastNodeArray.length == 2){
-                localMovesMadeCount --;
-            }
-        }
-        else {
-            var localMovesMadeCount = 0;
-        }
-    }
-    else if (pageType == "daily"){
-        if (document.querySelector(movesListBoxClass) && document.querySelector(movesListBoxClass).firstChild){
-            var movesArray = document.querySelectorAll(moveNodeClass);
-            var lastNodeArray = movesArray[movesArray.length - 1].childNodes;
-            var localMovesMadeCount = ((movesArray.length) * 2);
-            if (lastNodeArray.length == 3){
-                localMovesMadeCount --;
-            }
-        }
-        else {
-            var localMovesMadeCount = 0;
-        }
-    }
-    else if (pageType == "liveNoGame"){
-        if (document.querySelector(movesListBoxClass) && document.querySelectorAll(moveNodeClass).length){
-            var movesArray = document.querySelectorAll(moveNodeClass);
-            var lastNodeArray = movesArray[movesArray.length - 1].childNodes;
-            var localMovesMadeCount = ((movesArray.length) * 2);
-            if (lastNodeArray[4].textContent == ""){
-                localMovesMadeCount --;
-            }
-        }
-        else {
-            var localMovesMadeCount = 0;
-        }
-    }    
-    else if (pageType == "liveGame"){
-        if (document.querySelector(movesListBoxClass) && document.querySelector(movesListBoxClass).firstChild){
-            var movesArray = document.querySelectorAll(moveNodeClass);
-            var lastNodeArray = movesArray[movesArray.length - 1].childNodes;
-            var localMovesMadeCount = ((movesArray.length) * 2);
-            if (lastNodeArray.length == 3){
-                localMovesMadeCount --;
-            }
-        }
-        else {
-            var localMovesMadeCount = 0;
-        }
-    }      
-    return localMovesMadeCount;
-}
-
-
-function getLastMoveMade(){
-    
-    var movesPlayed = getMovesCount();
-    
-    // in case we just started a game as black and expecting opponent to play
-    if(movesPlayed == 0) {
-        //The node we need does not exist yet.
-        //Wait 500ms and try again
-        window.setTimeout(function(){
-            getLastMoveMade();
-        }, 500);
-        return;
-    }
-
-    var movesMade = document.querySelectorAll(moveNodeClass);
-    var lastMoveMade = movesMade[movesMade.length- 1];  
-    
-    if (pageType == "play"){
-        var lastMoveMadeDivs = lastMoveMade.childNodes;
-        var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 1];
-    }   
-    else if (pageType == "daily"){
-        var lastMoveMadeDivs = lastMoveMade.childNodes;
-        if (movesMadeCount % 2 == 0){
-            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 1];
-        }
-        else if (movesMadeCount % 2 != 0){
-            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
-        }
-    }
-    else if (pageType == "liveNoGame"){
-        var lastMoveMadeDivs = lastMoveMade.childNodes;
-        if (movesMadeCount % 2 == 0){
-            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 3];
-        }
-        else if (movesMadeCount % 2 != 0){
-            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 5];
-        }
-    }
-    else if (pageType == "liveGame"){
-        var lastMoveMadeDivs = lastMoveMade.childNodes;
-        if (movesMadeCount % 2 == 0){
-            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
-        }
-        else if (movesMadeCount % 2 != 0){
-            var lastMoveMade = lastMoveMadeDivs[lastMoveMadeDivs.length - 2];
-        }
-    }
-    
-    // remove move number if exists
-    var lastMoveMadeString = lastMoveMade.textContent;
-    lastMoveMadeString = lastMoveMadeString.replaceAll("\n", "").trim();
-    
-    if (lastMoveMadeString.split(" ")) {
-        var lastMoveMadeStringArray = lastMoveMadeString.split(" ");
-        lastMoveMadeString = lastMoveMadeStringArray[lastMoveMadeStringArray.length - 1];
-    }  
-    return lastMoveMadeString;
-}
-
-
-
-
-// make the move
-function makeMove(source, destination) {
-    
-    // get player color
-    var playerColor = getPlayerColor();
-    
-    // get board to get screen position and offsets and also square width
-    const gameBoard = document.querySelector('.board');
-    const offsetX = gameBoard.getBoundingClientRect().x;
-    const offsetY = gameBoard.getBoundingClientRect().y;
-    const squareWidth = gameBoard.getBoundingClientRect().width / 8;
-    const bubbles = true;
-    
-    // dicionário de conversão de casa em coordenadas
-    var dict = { "a": 1, "b": 2, "c": 3, "d": 4, "e": 5, "f": 6, "g": 7, "h": 8 };
-    
-    // origin square click
-    var sourceColumn = source[0];
-    var sourceRow = source[1];
-    
-    if (playerColor == "w") {
-        var clientX = squareWidth * (dict[sourceColumn] - 0.5) + offsetX;
-        var clientY = squareWidth * (8 + 0.5 - parseInt(sourceRow)) + offsetY;    
-    }
-    else {
-        var clientX = squareWidth * (9 - dict[sourceColumn] - 0.5) + offsetX;
-        var clientY = squareWidth * (- 0.5 + parseInt(sourceRow)) + offsetY;
-    }
-    
-    var event = new PointerEvent('pointerdown', { clientX, clientY, bubbles });
-    gameBoard.dispatchEvent(event);
-    
-    // destination square click 
-    var destinationColumn = destination[0];
-    var destinationRow = destination[1]; 
-    
-    if (playerColor == "w") {
-        clientX = squareWidth * (dict[destinationColumn] - 0.5) + offsetX;
-        clientY = squareWidth * (8 + 0.5 - parseInt(destinationRow)) + offsetY;   
-    }
-    else {
-        clientX = squareWidth * (9 - dict[destinationColumn] - 0.5) + offsetX;
-        clientY = squareWidth * (- 0.5 + parseInt(destinationRow)) + offsetY;   
-    }
-    event = new PointerEvent('pointerup', { clientX, clientY, bubbles });
-    document.querySelector('html').dispatchEvent(event); 
-    
-}
-
-
-
-// Observe if moves list has changed
-function startObservingMoves() {
-
-    var movesPlayed = getMovesCount();
-            
-    // in case we just started a game as black and expecting opponent to play
-    if(movesPlayed == 0) {
-        //The node we need does not exist yet.
-        //Wait 500ms and try again
-        window.setTimeout(function(){
-            startObservingMoves();
-        }, 500);
-        return;
-    }
-    
-    // Select the node that will be observed for mutations
-    if (pageType == "live") {
-        var targetNode = document.querySelector(movesListBoxClass).firstChild;
-    }
-    else {
-        var targetNode = document.querySelector(movesListBoxClass);
-    }
-    
-    // Options for the observer (which mutations to observe)
-    if (pageType == "play") {
-        var config = {
-        attributes: false,
-        childList: true,
-        subtree: true
-        };
-    }
-    else if (pageType == "analysis") {
-        var config = {
-        attributes: false,
-        childList: true,
-        subtree: false
-        };
-    }
-    else if (pageType == "daily") {
-        var config = {
-        attributes: false,
-        childList: true,
-        subtree: true
-        };
-    }
-    else if (pageType == "liveNoGame") {
-        var config = {
-        attributes: true,
-        childList: false,
-        subtree: false
-        };
-    }
-    else if (pageType == "liveGame") {
-        var config = {
-        attributes: true,
-        childList: false,
-        subtree: false
-        };
-    }
-    // Start observing the target node for configured mutations
-    observer.observe(targetNode, config);
-
-    // force the first callback 
-    window["callback"]();   
-
-}
-
-
-
-// Callback function to execute when mutations are observed
-var callback = function(mutations) {
-
-    // console.log("callback");
-    
-    // check if game started
-    var hasTheGameAlreadyStarted = hasTheGameStarted();    
-
-    // check if game is over
-    var isTheGameOver = isGameOver();    
-
-
-    if ((freedomEnabled == true) && (hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
-        // get player color
-        var playerColor = getPlayerColor();
-    
-        // get moves count
-        window['movesMadeCount'] = getMovesCount();
-    
-        // get last move made
-        var lastMoveMadeString = getLastMoveMade();
-        lastMoveMadeString = lastMoveMadeString.trim();
-        
-        // last move made to speech
-        var spokenLastMoveMadeString = lastMoveMadeString;
-        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/T/, "Torre ");;
-        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/C/, "Cavalo ");
-        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/B/, "Bispo ");
-        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/D/, "Dama ");
-        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/R/, "Rei ");
-        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/O-O-O/, "Grande Roque ");
-        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/O-O/, "Roque ");
-        spokenLastMoveMadeString = spokenLastMoveMadeString.replace(/x/, " por ");
-        
-        var makeTheMove = false;
-        
-        if (pageType == 'daily') {
-            var checkButtonClicked = setInterval(function() {
-                if (confirmButtonClicked == true) {
-                    makeTheMove = true;
-                    clearInterval(checkButtonClicked);
-                    confirmButtonClicked = false;
-                }
-                else {
-                    makeTheMove = false;
-                }
-            }, 100); // check every 100ms
-        }
-        else {
-            makeTheMove = true;
-        }
-        
-        if (makeTheMove == true) {
-            // make move on background
-            var englishLastMadeMoveString = lastMoveMadeString.replace(/C/, 'N');
-            englishLastMadeMoveString = englishLastMadeMoveString.replace(/D/, 'Q');
-            englishLastMadeMoveString = englishLastMadeMoveString.replace(/R/, 'K');
-            englishLastMadeMoveString = englishLastMadeMoveString.replace(/T/, 'R');
-            console.log(englishLastMadeMoveString);
-            console.log(chess.fen());
-            chess.move(englishLastMadeMoveString);
-        }
-
-            
-        // make the alert that move has been played
-        if (movesMadeCount %2 == 0) {
-            if (deficienteVisual == true) {
-                var speechMessage = "As Pretas jogaram " + spokenLastMoveMadeString + ", agora as Brancas jogam!";                
-                speech.text = speechMessage;
-                window.speechSynthesis.speak(speech);
-            }
-        }
-        else{
-            if (deficienteVisual == true) {
-                var speechMessage = "As Brancas jogaram " + spokenLastMoveMadeString + ", agora as Pretas jogam!";
-                speech.text = speechMessage;
-                window.speechSynthesis.speak(speech);
-            }
-        }
-    }
-    else {
-        window['observer'].disconnect(); 
-        Swal.fire({
-            icon: 'success',
-            title: "Destivado!",
-            text: "O modo Freedom foi desativado.",
-            showConfirmButton: false,
-            timer: 1500
-        });
-        freedomEnabled = false;
-    }   
-};
-
-
-function getPiecesToFEN() {
-
-    var fenPosition = "";
-    
-    for (var i = 8; i >=1; i--) {
-        for (var j = 1; j <=8; j++) {
-            // console.log(fenPosition);
-            if ((pageType == "analysis") || (pageType == "play") || (pageType == "daily") || (pageType == "liveGame")) {
-                var classNameForPiece = '.piece.square-' + j + i;
-            }
-            else {
-                var classNameForPiece = 'piece.square-0' + j + "0" + i;
-            }
-            var pieceDiv = document.querySelector(classNameForPiece);
-            if (pieceDiv) {
-                var listOfClasses = pieceDiv.classList;
-                for (var classInfo in listOfClasses) {
-                    if (listOfClasses[classInfo][0] == "w") {
-                        fenPosition = fenPosition + listOfClasses[classInfo][1].toUpperCase(); 
-                    }
-                    else if (listOfClasses[classInfo][0] == "b") {
-                        fenPosition = fenPosition + listOfClasses[classInfo][1].toLowerCase(); 
-                    }
-                }
-            }
-            else {
-                if (j == 1) {
-                    fenPosition = fenPosition + "1";
-                }
-                else if (!isNaN(fenPosition[fenPosition.length -1])) {
-                    var referenceNumber = fenPosition[fenPosition.length -1];
-                    var newNumber = parseInt(referenceNumber) + 1;
-                    fenPosition = fenPosition.slice(0, -1);
-                    fenPosition = fenPosition + newNumber;
-                }
-                else {
-                    fenPosition = fenPosition + "1";
-                } 
-            }
-        } 
-        fenPosition = fenPosition + "/";
-    }
-    
-    var movesPlayed = getMovesCount();
-    
-    if (movesPlayed %2 == 0) {
-        var playerTurn = "w";
-    }
-    else {
-        var playerTurn = "b";
-    }
-    
-    fenPosition = fenPosition.slice(0, -1);
-    fenPosition = fenPosition + " " + playerTurn + " KQkq - 0 1";
-    
-    return fenPosition;
-} 
 
 
 // enable Freedom Chess Mode
@@ -902,51 +58,12 @@ function enableFreedomMode() {
 
     // enableMouseCoordinatesDebug();
     
-    // Event listeners for daily games
-    window['confirmButtonClicked'] = false;
-    if (pageType == "daily") {
-        var checkButtonExists = setInterval(function() {    
-            if (document.querySelector('.ui_v5-button-component.ui_v5-button-primary') !== null) {
-                window['confirmButton'] = document.querySelector('.ui_v5-button-component.ui_v5-button-primary');
-                window['cancelButton'] = document.querySelector('.ui_v5-button-component.ui_v5-button-basic');
-                confirmButton.addEventListener('click', function() {
-                    confirmButtonClicked = true;
-                });
-                clearInterval(checkButtonExists);            
-            }   
-            else{
-            
-            }     
-        }, 100); // check every 100ms
-    }    
-    
-    // Event listeners for promotion
-    var checkPromotionWindowExists = setInterval(function() {    
-        if (document.querySelector('.promotion-window') !== null) {
-            var divButtons = document.querySelectorAll('.promotion-piece');
-            console.log(divButtons);
-            for (var i=0, max=divButtons.length; i < max; i++) {
-                console.log(divButtons[i].classList);
-                if (divButtons[i].classList.contains('bb') || divButtons[i].classList.contains('wb')) {
-                    window['promotionBishop'] = divButtons[i]
-                }
-                else if (divButtons[i].classList.contains('bn') || divButtons[i].classList.contains('wn')) {
-                    window['promotionKnight'] = divButtons[i]
-                }
-                else if (divButtons[i].classList.contains('bq') || divButtons[i].classList.contains('wq')) {
-                    window['promotionQueen'] = divButtons[i]
-                }
-                else if (divButtons[i].classList.contains('br') || divButtons[i].classList.contains('wr')) {
-                    window['promotionRook'] = divButtons[i]
-                }
-            }
-            clearInterval(checkPromotionWindowExists);            
-        }   
-        else{
-        
-        }     
-    }, 100); // check every 100ms
-    
+    // Event listeners for daily games and promotion
+    const head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
+    const script = document.createElement('script');
+    script.setAttribute("type", "module");
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/eventListeners.js'));
+    head.insertBefore(script, head.lastChild);
     
     // Text to Speech
     window['speech'] = new SpeechSynthesisUtterance();
@@ -960,7 +77,7 @@ function enableFreedomMode() {
 
     // get starting fen
     var fenPosition = getPiecesToFEN();
-    // console.log(fenPosition);
+    console.log(fenPosition);
     
     // Start chessboard to follow the game on background
     window['chess'] = new Chess(fenPosition);
@@ -977,7 +94,21 @@ function enableFreedomMode() {
     // speech.text = welcomeMessage;
     // window.speechSynthesis.speak(speech);
     
-    if ((hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
+    if (pageType != "puzzles") {
+    
+        if ((hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
+        
+            recognition.start();
+        
+            // get player color
+            var playerColor = getPlayerColor();
+            
+            // start observing opponent's moves
+            startObservingMoves();     
+        
+        }
+    }
+    else {
     
         recognition.start();
     
@@ -985,9 +116,11 @@ function enableFreedomMode() {
         var playerColor = getPlayerColor();
         
         // start observing opponent's moves
-        startObservingMoves();     
+        startObservingMovesForPuzzles();     
     
     }
+    
+    
 }
 
 
@@ -1000,4 +133,3 @@ function enableFreedomMode() {
 
 
     
-
