@@ -9,6 +9,10 @@ window.onload = () =>{
     const head = document.head || document.getElementsByTagName("head")[0] || document.documentElement;
     const script = document.createElement('script');
     script.setAttribute("type", "module");
+    
+    // get classes for elements for functions on different pages and also get pagetypes from url
+    script.setAttribute("src", chrome.extension.getURL('builtFunctions/classesMappingChessCom.js'));
+    head.insertBefore(script, head.lastChild);
 
     // get string similarity functions
     script.setAttribute("src", chrome.extension.getURL('builtFunctions/stringsSimilarity.js'));
@@ -36,10 +40,6 @@ window.onload = () =>{
     
     // get board pieces and create FEN position
     script.setAttribute("src", chrome.extension.getURL('builtFunctions/getPiecesToFenPosition.js'));
-    head.insertBefore(script, head.lastChild);
-    
-    // get classes for elements for functions on different pages and also get pagetypes from url
-    script.setAttribute("src", chrome.extension.getURL('builtFunctions/classesMappingChessCom.js'));
     head.insertBefore(script, head.lastChild);
     
     // get observers and callbacks for screen mutations
@@ -75,51 +75,17 @@ function enableFreedomMode() {
     // deficiente visual?
     window['deficienteVisual'] = false;
 
-    // get starting fen
-    var fenPosition = getPiecesToFEN();
-    console.log(fenPosition);
-    
-    // Start chessboard to follow the game on background
-    window['chess'] = new Chess(fenPosition);
-    
-    // check if game started
-    var hasTheGameAlreadyStarted = hasTheGameStarted();
-    
-    // check if game is over
-    var isTheGameOver = isGameOver();
-    
     // welcome message and instructions
     var welcomeMessage = "Modo Freedom Ativado, basta dizer os lances para jogar. Se você for deficiente visual, diga 'Sou deficiente visual' para que eu diga em voz alta os lances de seu adversário. Boa partida!"
     
     // speech.text = welcomeMessage;
     // window.speechSynthesis.speak(speech);
     
-    if (pageType != "puzzles") {
+    // start recognizing speech
+    recognition.start();
     
-        if ((hasTheGameAlreadyStarted == true) && (isTheGameOver == false)) {
-        
-            recognition.start();
-        
-            // get player color
-            var playerColor = getPlayerColor();
-            
-            // start observing opponent's moves
-            startObservingMoves();     
-        
-        }
-    }
-    else {
-    
-        recognition.start();
-    
-        // get player color
-        var playerColor = getPlayerColor();
-        
-        // start observing opponent's moves
-        startObservingMovesForPuzzles();     
-    
-    }
-    
+    // start observing opponent's moves
+    startObservingMoves();     
     
 }
 
