@@ -85,7 +85,7 @@ function enableFreedomMode() {
     recognition.start();
     
     // start observing opponent's moves
-    startObservingMoves();     
+    startObservingMoves();
     
 }
 
