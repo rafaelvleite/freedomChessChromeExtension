@@ -8,13 +8,6 @@ function enableFreedomMode() {
 
     // enableMouseCoordinatesDebug();
     
-    // Text to Speech
-    window['speech'] = new SpeechSynthesisUtterance();
-    speech.lang = "pt-BR";
-    speech.rate = 0.8;
-    speech.pitch = 1;
-    speech.volume = 1;
-    
     // deficiente visual?
     window['deficienteVisual'] = false;
 
@@ -27,9 +20,6 @@ function enableFreedomMode() {
     // start observing opponent's moves
     startObservingMoves();
      
-    // start recognizing speech
-    annyang.setLanguage('pt-BR');
-    annyang.start();
     
 }
 
