@@ -7,29 +7,24 @@
 function enableFreedomMode() {
 
     // enableMouseCoordinatesDebug();
-    
+
     // Text to Speech
     window['speech'] = new SpeechSynthesisUtterance();
     speech.lang = "pt-BR";
-    speech.rate = 0.8;
+    speech.rate = 1.2;
     speech.pitch = 1;
-    speech.volume = 1;
+    speech.volume = 1;    
+
+    // start recognizing speech
+    annyang.setLanguage('pt-BR');
+    annyang.start();
     
     // deficiente visual?
-    window['deficienteVisual'] = false;
-
-    // welcome message and instructions
-    var welcomeMessage = "Modo Freedom Ativado, basta dizer os lances para jogar. Se você for deficiente visual, diga 'Sou deficiente visual' para que eu diga em voz alta os lances de seu adversário. Boa partida!"
-    
-    // speech.text = welcomeMessage;
-    // window.speechSynthesis.speak(speech);
+    window['deficienteVisual'] = true;
     
     // start observing opponent's moves
     startObservingMoves();
      
-    // start recognizing speech
-    annyang.setLanguage('pt-BR');
-    annyang.start();
     
 }
 
