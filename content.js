@@ -17,7 +17,7 @@ function enableFreedomMode() {
 
     // start recognizing speech
     annyang.setLanguage('pt-BR');
-    annyang.start();
+    annyang.start({ autoRestart: true });
     
     // deficiente visual?
     window['deficienteVisual'] = true;
