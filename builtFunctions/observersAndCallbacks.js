@@ -21,8 +21,10 @@ var callback = function(mutations) {
                 lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/  +/g, ' ');
                 lastMoveMadeStringModified = lastMoveMadeStringModified.trim();
                 lastMoveMadeStringModified = lastMoveMadeStringModified.toLowerCase();
-                speech.text = lastMoveMadeStringModified;
-                window.speechSynthesis.speak(speech);
+                if (window['pageType'] != "analysis") {
+                    speech.text = lastMoveMadeStringModified;
+                    window.speechSynthesis.speak(speech);
+                }
                 window['lastMoveMadeStringAlreadySpoken'] = lastMoveMadeString;
             }
         }

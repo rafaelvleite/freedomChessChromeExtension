@@ -267,21 +267,6 @@ commands['de uma por :expr'] = {
     'regexp': /^deu uma por\b(\s?([A-Ha-h]\s?[1-8]))/i,
     'callback': function(expr){calculateFunction("Qx"+expr.toLowerCase());}
 };
-/*
-// Solution for Qxf3 in portuguese
-phrasesArray = ['dema por F3', 'dhema por F3', 'dermapur F3', 'tema por F3', 'demar por F3',
-'deu uma por F3', 'Delmar por F3', 'deuma por F3', 'de 1 por F3', 'de uma por F3',
-'dama para F3', 'deu uma para F3', 'Delma para F3', 'de 1 para F3', 'Delma por F3'];
-moveToBeMade = 'Qxf3'; 
-createCustomSolution(phrasesArray, moveToBeMade);
-
-// Solution for Qg3 in portuguese
-phrasesArray = ['de uma G3', 'G G3', 'g g 3', 'dama G3', 'Gama GT 3',
-'turma G3', 'Dilma G3', 'g g 3', 'deu uma G3', 'Dilma g 3'];
-moveToBeMade = 'Qg3'; 
-createCustomSolution(phrasesArray, moveToBeMade);
-
-*/
 
 // Solution for cx in Portuguese
 commands['se for :expr'] = {
@@ -296,6 +281,22 @@ commands['se pôr :expr'] = {
     'regexp': /^se pôr(\s?([A-Ha-h]\s?[1-8]))/i,
     'callback': function(expr){calculateFunction("cx"+expr.toLowerCase());}
 };
+
+// Solution for cxd in Portuguese
+commands['se for de:expr'] = {
+    'regexp': /^se for de(\s?([1-8]))/i,
+    'callback': function(expr){calculateFunction("cxd"+expr.toLowerCase());}
+};
+commands['sipor de:expr'] = {
+    'regexp': /^sipor de(\s?([1-8]))/i,
+    'callback': function(expr){calculateFunction("cxd"+expr.toLowerCase());}
+};
+commands['se pôr de:expr'] = {
+    'regexp': /^se pôr de(\s?([1-8]))/i,
+    'callback': function(expr){calculateFunction("cxd"+expr.toLowerCase());}
+};
+
+'se pôr de 6', 'se pôr de seis', 'se por de 6', 'se por de seis', 'sipor de 6'
 
 // Solution for dx in portuguese
 commands['depor :expr'] = {
@@ -367,8 +368,8 @@ annyang.addCallback('resultNoMatch', function(possible_phrases) {
         showConfirmButton: false,
         timer: 3000
     });
-    speech.text = possible_phrases[0] + '? Não entendi...';
-    window.speechSynthesis.speak(speech);
+    /*speech.text = 'Não entendi...';
+    window.speechSynthesis.speak(speech);*/
 
 });
 
