@@ -368,8 +368,8 @@ annyang.addCallback('resultNoMatch', function(possible_phrases) {
         showConfirmButton: false,
         timer: 3000
     });
-    /*speech.text = 'Não entendi...';
-    window.speechSynthesis.speak(speech);*/
+    speech.text = possible_phrases[0] + '? Não entendi...';
+    window.speechSynthesis.speak(speech);
 
 });
 
