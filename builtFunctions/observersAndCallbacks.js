@@ -1,33 +1,37 @@
-// Callback function to execute when mutations are observed for puzzles
+// Callback function to execute when mutations are observed
 var callback = function(mutations) {
 
-    if (deficienteVisual == true) {
+    console.log("mutation detected");
+
+    if (deficienteVisual == true || deficienteVisual == false) {
         
-        window['lastMoveMadeString'] = getLastMoveMade();
-        
-        if (lastMoveMadeString != undefined) {
-            if (lastMoveMadeStringAlreadySpoken != lastMoveMadeString) {
-                lastMoveMadeStringModified = lastMoveMadeString.replace(/C/, 'Cavalo ');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/T/, 'Torre ');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/R/, 'Rei ');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/D/, 'Dama ');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/B/, 'Bispo ');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/x/, ' por ');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/O-O-O/, 'Grande roque');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/O-O/, 'Roque');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/#/, '');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/=/, ' ');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/\+/g, '');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/  +/g, ' ');
-                lastMoveMadeStringModified = lastMoveMadeStringModified.trim();
-                lastMoveMadeStringModified = lastMoveMadeStringModified.toLowerCase();
-                if (window['pageType'] != "analysis") {
-                    speech.text = lastMoveMadeStringModified;
-                    window.speechSynthesis.speak(speech);
+        setTimeout(function() {
+            window['lastMoveMadeString'] = getLastMoveMade();
+            if (lastMoveMadeString != undefined) {
+                if (lastMoveMadeStringAlreadySpoken != lastMoveMadeString) {
+                    lastMoveMadeStringModified = lastMoveMadeString.replace(/C/, 'Cavalo ');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/T/, 'Torre ');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/R/, 'Rei ');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/D/, 'Dama ');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/B/, 'Bispo ');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/x/, ' por ');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/O-O-O/, 'Grande roque');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/O-O/, 'Roque');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/#/, '');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/=/, ' ');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/\+/g, '');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.replace(/  +/g, ' ');
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.trim();
+                    lastMoveMadeStringModified = lastMoveMadeStringModified.toLowerCase();
+                    if (window['pageType'] != "analysis") {
+                        speech.text = lastMoveMadeStringModified;
+                        window.speechSynthesis.speak(speech);
+                        
+                    }
+                    window['lastMoveMadeStringAlreadySpoken'] = lastMoveMadeString;
                 }
-                window['lastMoveMadeStringAlreadySpoken'] = lastMoveMadeString;
-            }
-        }
+            }    
+        }, 500);
         
     }
     /*
@@ -44,6 +48,7 @@ var callback = function(mutations) {
         }
         // restart chessboard to follow the game on background
         window['chess'] = new Chess(fenPosition);
+        console.log("fen = " + fenPosition);
     }, 500);
 
 }
@@ -82,6 +87,7 @@ function startObservingMoves() {
     
     // Start observing the target node for configured mutations
     observer.observe(targetNode, config);
+    
     
 }
 

@@ -370,6 +370,7 @@ annyang.addCallback('resultNoMatch', function(possible_phrases) {
     });
     speech.text = possible_phrases[0] + '? Não entendi...';
     window.speechSynthesis.speak(speech);
+    setTimeout(function() { }, 2000);
 
 });
 
