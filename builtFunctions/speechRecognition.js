@@ -1,8 +1,18 @@
 // Speech Recognition
 
-const calculateFunction = function(expr) {
+function disableMicrophone() {
+    if (annyang) {
+        annyang.abort();
+    }
+}
 
-    console.log("Expressão reconhecida: " + expr);
+function enableMicrophone() {
+    if (annyang) {
+        annyang.start({ autoRestart: true });
+    }
+}
+
+const calculateFunction = function(expr) {
 
     var lance = expr.replace(/por/, "x");
     lance = lance.replace(/ flor /, " x ");
@@ -16,8 +26,6 @@ const calculateFunction = function(expr) {
     lance = lance.replace(/torre/, "R");
     lance = lance.replace(/ /g,'');
     
-    console.log(lance);
-
     var passedMatchTests = 0;
     
     var higherScoresSum = -1;
@@ -36,7 +44,6 @@ const calculateFunction = function(expr) {
         let levenshteinScore = similarity(lance, legalMoves[move]);
         let jaroWrinkerScore = JaroWrinker(lance, legalMoves[move]);
         let localScoresSum = (levenshteinScore * 1) + (jaroWrinkerScore * 1);
-        console.log(lance, legalMoves[move], levenshteinScore, jaroWrinkerScore);
         if (localScoresSum > higherScoresSum) {
             bestMove = chess.moves()[move];
             higherScoresSum = localScoresSum;
@@ -62,8 +69,12 @@ const calculateFunction = function(expr) {
         lanceVencedor = lanceVencedor.replace("+", " xeque");        
     
         speech.text = 'Confirma ' + lanceVencedor + '?';
+        disableMicrophone(); // Disable microphone before speaking
         window.speechSynthesis.speak(speech);
-        
+        // Enable microphone after speaking
+        speech.onend = function() {
+            enableMicrophone();
+        };
         
         Swal.fire({
           title: speech.text,
@@ -88,9 +99,13 @@ const calculateFunction = function(expr) {
         }); 
     }
     else {
-        console.log("Não passou");
         speech.text = 'Favor tentar novamente';
+        disableMicrophone(); // Disable microphone before speaking
         window.speechSynthesis.speak(speech);
+        // Enable microphone after speaking
+        speech.onend = function() {
+            enableMicrophone();
+        };
         Swal.fire({
           position: 'center-start',
           icon: 'warning',
@@ -106,11 +121,6 @@ const calculateFunction = function(expr) {
 
 
 const commands = {
-        'deficiente visual': () => { 
-            var deficienteVisualMessage = "Modo para Deficiencia Visual Ativado!"
-            speech.text = deficienteVisualMessage;
-            window.speechSynthesis.speak(speech);
-        },
         'reativar': () => {
             enableDisableFreedomMode();
         }, 
@@ -137,7 +147,6 @@ const commands = {
             }
             if (document.querySelector('.promotion-window')) {
                 chess.undo();
-                console.log(document.querySelector('.close-button'));
                 document.querySelector('.close-button').click();
             }
         },
@@ -369,7 +378,12 @@ annyang.addCallback('resultNoMatch', function(possible_phrases) {
         timer: 3000
     });
     speech.text = possible_phrases[0] + '? Não entendi...';
+    disableMicrophone(); // Disable microphone before speaking
     window.speechSynthesis.speak(speech);
+    // Enable microphone after speaking
+    speech.onend = function() {
+        enableMicrophone();
+    };
     setTimeout(function() { }, 2000);
 
 });

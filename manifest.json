@@ -1,6 +1,6 @@
 {
     "name": "Freedom Chess for Chess.com",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "description": "Helping chess to become acessible for everyone!",
     "manifest_version": 3,
     "web_accessible_resources": [{

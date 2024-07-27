@@ -17,11 +17,8 @@ function enableFreedomMode() {
 
     // start recognizing speech
     annyang.setLanguage('pt-BR');
-    annyang.start({ autoRestart: true });
+    //annyang.start({ autoRestart: true });
 
-    // deficiente visual?
-    window['deficienteVisual'] = true;
-    
     // start observing opponent's moves
     startObservingMoves();
      

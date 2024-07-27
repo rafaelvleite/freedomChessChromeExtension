@@ -1,8 +1,21 @@
+function disableMicrophone() {
+    if (annyang) {
+        annyang.abort();
+    }
+}
+
+function enableMicrophone() {
+    if (annyang) {
+        annyang.start({ autoRestart: true });
+    }
+}
+
 window['freedomEnabled'] = false;
 
 window['confirm'] = function(question, text, confirmButtonText, cancelButtonText, callback) {
 
     // Text to Speech
+    disableMicrophone(); // Disable microphone before speaking
     window['speech'] = new SpeechSynthesisUtterance();
     speech.lang = "pt-BR";
     speech.rate = 1.2;
@@ -10,7 +23,6 @@ window['confirm'] = function(question, text, confirmButtonText, cancelButtonText
     speech.volume = 1;    
     speech.text = question;
     window.speechSynthesis.speak(speech);
-            
     Swal.fire({
           title: question,
           imageUrl: chrome.runtime.getURL('images/freedomChess.png'),
@@ -40,6 +52,7 @@ window['enableDisableFreedomMode'] = function() {
         confirm(question, text, confirmButtonText, cancelButtonText, function (confirmed) {
             if (confirmed) {
                 speech.text = 'O modo Freedom está ativo.';
+                disableMicrophone(); // Disable microphone before speaking
                 window.speechSynthesis.speak(speech);
                 Swal.fire({
                     icon: 'success',
@@ -52,6 +65,10 @@ window['enableDisableFreedomMode'] = function() {
                     enableFreedomMode();
                 }, 2000);
                 freedomEnabled = true;
+                // Enable microphone after speaking
+                speech.onend = function() {
+                    enableMicrophone();
+                };
             }
             else {
                 freedomEnabled = false;
@@ -69,6 +86,7 @@ window['enableDisableFreedomMode'] = function() {
             if (confirmed) {
                 observer.disconnect(); 
                 speech.text = 'O modo Freedom foi desativado.';
+                disableMicrophone(); // Disable microphone before speaking
                 window.speechSynthesis.speak(speech);
                 Swal.fire({
                     icon: 'success',
@@ -79,6 +97,10 @@ window['enableDisableFreedomMode'] = function() {
                     timer: 1500
                 });
                 freedomEnabled = false;
+                // Enable microphone after speaking
+                speech.onend = function() {
+                    enableMicrophone();
+                };
             }
             else {
                 freedomEnabled = true;
