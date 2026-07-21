@@ -1,17 +1,16 @@
 {
-  "name": "chrome-extension",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "name": "freedom-chess-extension",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Extensão de controle por voz para o Chess.com.",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/*.test.js",
+    "check": "node scripts/build-extension.mjs check",
+    "build": "node scripts/build-extension.mjs build",
+    "package": "node scripts/build-extension.mjs package"
   },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@types/chrome": "^0.0.136",
-    "chess.js": "^0.11.0",
-    "sweetalert2": "^10.16.7",
-    "types": "^0.1.1"
-  }
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "ISC"
 }

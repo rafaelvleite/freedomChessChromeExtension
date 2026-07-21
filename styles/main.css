@@ -1,1 +1,188 @@
-.freedomButtonClass{    padding: 0;    border: none;    background: none;    margin-left:1%;}.swal2-container:not(.swal2-top):not(.swal2-top-start):not(.swal2-top-end):not(.swal2-top-left):not(.swal2-top-right):not(.swal2-center-start):not(.swal2-center-end):not(.swal2-center-left):not(.swal2-center-right):not(.swal2-bottom):not(.swal2-bottom-start):not(.swal2-bottom-end):not(.swal2-bottom-left):not(.swal2-bottom-right):not(.swal2-grow-fullscreen)>.swal2-modal {    font-size: 1em;}.moveInputClass{    margin-right: 15%;    font-size: 1em;}.texts p {  color: black;  text-align: left;  width: 100%;  background-color: white;  padding: 10px;  border-radius: 8px;  margin-bottom: 10px;}.swal2-container {    z-index: 99999 !important;}
+.freedom-chess-button {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    border-radius: 0.6rem;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    height: 3.6rem;
+    justify-content: center;
+    min-width: 3.6rem;
+    padding: 0.5rem;
+    position: relative;
+}
+
+#freedom-chess-fallback-controls {
+    background: #312e2b;
+    border-radius: 0.8rem;
+    bottom: 1.6rem;
+    box-shadow: 0 0.6rem 2.4rem rgb(0 0 0 / 35%);
+    color: #fff;
+    padding: 0.4rem;
+    position: fixed;
+    right: 1.6rem;
+    z-index: 2147483645;
+}
+
+.freedom-chess-button:hover {
+    background: rgb(255 255 255 / 10%);
+}
+
+.freedom-chess-button:focus-visible {
+    outline: 0.3rem solid #81b64c;
+    outline-offset: 0.2rem;
+}
+
+.freedom-chess-button.is-enabled {
+    background: #45753c;
+}
+
+.freedom-chess-button[data-state="listening"]::after {
+    background: #76c442;
+    border: 0.2rem solid #fff;
+    border-radius: 50%;
+    bottom: 0.25rem;
+    content: "";
+    height: 0.85rem;
+    position: absolute;
+    right: 0.25rem;
+    width: 0.85rem;
+}
+
+.freedom-chess-button[data-state="speaking"]::after,
+.freedom-chess-button[data-state="processing"]::after,
+.freedom-chess-button[data-state="preparing"]::after,
+.freedom-chess-button[data-state="confirming"]::after {
+    animation: freedom-chess-pulse 1s ease-in-out infinite alternate;
+    background: #f6c344;
+    border-radius: 50%;
+    bottom: 0.25rem;
+    content: "";
+    height: 0.85rem;
+    position: absolute;
+    right: 0.25rem;
+    width: 0.85rem;
+}
+
+.freedom-chess-button-icon {
+    font-size: 2.1rem;
+    line-height: 1;
+}
+
+.freedom-chess-visually-hidden {
+    border: 0 !important;
+    clip: rect(0 0 0 0) !important;
+    clip-path: inset(50%) !important;
+    height: 1px !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    position: absolute !important;
+    white-space: nowrap !important;
+    width: 1px !important;
+}
+
+.freedom-chess-dialog-overlay {
+    align-items: center;
+    background: rgb(0 0 0 / 62%);
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    padding: 2rem;
+    position: fixed;
+    z-index: 2147483646;
+}
+
+.freedom-chess-dialog {
+    background: #fff;
+    border-radius: 1.2rem;
+    box-shadow: 0 1.6rem 5rem rgb(0 0 0 / 35%);
+    color: #262421;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 48rem;
+    padding: 2.4rem;
+    width: min(100%, 48rem);
+}
+
+.freedom-chess-dialog h2 {
+    color: inherit;
+    font-size: 2.2rem;
+    line-height: 1.25;
+    margin: 0 0 1.2rem;
+}
+
+.freedom-chess-dialog p {
+    color: inherit;
+    font-size: 1.6rem;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.freedom-chess-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: flex-end;
+    margin-top: 2.4rem;
+}
+
+.freedom-chess-dialog-button {
+    background: #e7e6e5;
+    border: 0;
+    border-radius: 0.6rem;
+    color: #262421;
+    cursor: pointer;
+    font: 700 1.5rem/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    min-height: 4.4rem;
+    padding: 1rem 1.6rem;
+}
+
+.freedom-chess-dialog-button:hover {
+    filter: brightness(0.96);
+}
+
+.freedom-chess-dialog-button:focus-visible {
+    outline: 0.3rem solid #2b78c5;
+    outline-offset: 0.2rem;
+}
+
+.freedom-chess-dialog-button.is-primary {
+    background: #4f8f3a;
+    color: #fff;
+}
+
+.freedom-chess-dialog-button.is-danger {
+    background: #c33b32;
+    color: #fff;
+}
+
+@keyframes freedom-chess-pulse {
+    from {
+        opacity: 0.45;
+        transform: scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1.12);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .freedom-chess-button::after {
+        animation: none !important;
+    }
+}
+
+@media (prefers-color-scheme: dark) {
+    .freedom-chess-dialog {
+        background: #312e2b;
+        color: #f4f2ef;
+    }
+
+    .freedom-chess-dialog-button {
+        background: #56524e;
+        color: #fff;
+    }
+}

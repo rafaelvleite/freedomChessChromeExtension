@@ -1,62 +1,49 @@
 {
-    "name": "Freedom Chess for Chess.com",
-    "version": "1.0.5",
-    "description": "Helping chess to become acessible for everyone!",
-    "manifest_version": 3,
-    "web_accessible_resources": [{
-        "resources": ["images/speech-icon.png", 
-                        "images/freedomChess.png",
-                        "builtFunctions/classesMappingChessCom.js",
-                        "thirdParty/annyang.min.js",
-                        "thirdParty/chess.js/chess.js",
-                        "builtFunctions/createFreedomModeButton.js",
-                        "builtFunctions/enableDisableFreedomMode.js",
-                        "builtFunctions/stringsSimilarity.js",
-                        "builtFunctions/getPiecesToFenPosition.js",
-                        "builtFunctions/moveFunctions.js",
-                        "builtFunctions/eventListeners.js",
-                        "builtFunctions/observersAndCallbacks.js",
-                        "builtFunctions/speechRecognition.js"],
-        "matches": ["<all_urls>"]
-    }],
-    "content_security_policy": {
-        "extension_pages": "script-src 'self'; object-src 'self'; script-src-elem 'self' 'unsafe-inline' https://ajax.googleapis.com;"
+  "manifest_version": 3,
+  "name": "Freedom Chess for Chess.com",
+  "version": "2.0.0",
+  "description": "Controle o tabuleiro do Chess.com por voz, com foco em acessibilidade e privacidade.",
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.chess.com/*"
+      ],
+      "js": [
+        "builtFunctions/mainWorldBridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
     },
-    "background":{
-        "service_worker": "background.js"
+    {
+      "matches": [
+        "https://www.chess.com/*"
+      ],
+      "css": [
+        "styles/main.css"
+      ],
+      "js": [
+        "builtFunctions/core.js",
+        "builtFunctions/freedomChessApp.js"
+      ],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    }
+  ],
+  "icons": {
+    "16": "images/freedomChess16.png",
+    "128": "images/freedomChess128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "images/freedomChess16.png",
+      "128": "images/freedomChess128.png"
     },
-    "content_scripts":[
-        {
-            "matches": ["https://www.chess.com/*"],
-            "exclude_matches": [],
-            "css": ["styles/main.css"],
-            "js": ["thirdParty/jquery-3.6.0.min.js", 
-                    "thirdParty/sweetalert2/dist/sweetalert2.all.min.js",
-                    "builtFunctions/classesMappingChessCom.js",
-                    "content.js",
-                    "thirdParty/annyang.min.js",
-                    "thirdParty/chess.js/chess.js",
-                    "builtFunctions/createFreedomModeButton.js",
-                    "builtFunctions/enableDisableFreedomMode.js",
-                    "builtFunctions/stringsSimilarity.js",
-                    "builtFunctions/getPiecesToFenPosition.js",
-                    "builtFunctions/moveFunctions.js",
-                    "builtFunctions/eventListeners.js",
-                    "builtFunctions/observersAndCallbacks.js",
-                    "builtFunctions/speechRecognition.js"
-                    ],
-            "run_at": "document_end"
-        }
-    ],
-    "host_permissions": [
-      "https://www.chess.com/"
-    ],
-    "icons": {
-        "16": "images/freedomChess16.png",
-        "128": "images/freedomChess128.png"
-      },
-    "action": {
-      "default_icon": "images/freedomChess128.png",
-      "default_title": "Chess for all!"
-    }    
+    "default_title": "Alternar Freedom Chess"
+  }
 }
