@@ -16,6 +16,43 @@
     const EXTENSION_SOURCE = "freedom-chess-extension";
     const ACTIVE_BOARD_SELECTOR = 'wc-chess-board[data-freedom-chess-active-board="true"]';
     const MOVE_TIMEOUT_MS = 2500;
+    const MISSING_BOARD_TOLERANCE = 3;
+    // How long a recognizer may go silent after the utterance ended before the
+    // session is declared hung.
+    const STALL_TIMEOUT_MS = 3000;
+
+    // Without a console channel the extension had no way to tell its own author
+    // what it was doing. Warnings are always emitted; this only adds the
+    // step-by-step trace: localStorage.freedomChessDebug = "1"
+    const DEBUG = (() => {
+        try {
+            return globalThis.localStorage?.getItem?.("freedomChessDebug") === "1";
+        } catch (_error) {
+            return false;
+        }
+    })();
+
+    // SpeechRecognitionPhrase is the newest and least stable part of the stack:
+    // Chrome raised "phrases-not-supported" for online recognition even after
+    // accepting the assignment. Contextual biasing is a nice-to-have, so it is
+    // opt-in: localStorage.freedomChessPhraseHints = "1"
+    const PHRASE_HINTS_ENABLED = (() => {
+        try {
+            return globalThis.localStorage?.getItem?.("freedomChessPhraseHints") === "1";
+        } catch (_error) {
+            return false;
+        }
+    })();
+
+    function debug(...args) {
+        if (DEBUG) {
+            globalThis.console?.log?.("%c[FreedomChess]", "color:#81b64c;font-weight:bold", ...args);
+        }
+    }
+
+    function warn(...args) {
+        globalThis.console?.warn?.("[FreedomChess]", ...args);
+    }
 
     const delay = (milliseconds) => new Promise((resolve) => {
         window.setTimeout(resolve, milliseconds);
@@ -149,6 +186,7 @@
             this.dialogResolver = null;
             this.dialogPreviousFocus = null;
             this.dialogKeyHandler = null;
+            this.statusTimer = null;
             this.ensureStatusRegion();
         }
 
@@ -157,7 +195,7 @@
             if (!status) {
                 status = document.createElement("div");
                 status.id = STATUS_ID;
-                status.className = "freedom-chess-visually-hidden";
+                status.className = "freedom-chess-status";
                 status.setAttribute("role", "status");
                 status.setAttribute("aria-live", "polite");
                 status.setAttribute("aria-atomic", "true");
@@ -217,12 +255,20 @@
             if (!this.status) {
                 this.ensureStatusRegion();
             }
+            debug("status:", message);
+            window.clearTimeout(this.statusTimer);
             this.status.textContent = "";
             window.setTimeout(() => {
                 if (this.status) {
                     this.status.textContent = message;
+                    this.status.dataset.visible = "true";
                 }
             }, 10);
+            this.statusTimer = window.setTimeout(() => {
+                if (this.status) {
+                    this.status.dataset.visible = "false";
+                }
+            }, 6000);
         }
 
         showNotice(title, message, buttonLabel = "OK") {
@@ -354,11 +400,12 @@
     }
 
     class VoiceController {
-        constructor({ onAlternatives, onFatalError, onState, onOutput }) {
+        constructor({ onAlternatives, onFatalError, onState, onOutput, onLocalModeUnusable }) {
             this.onAlternatives = onAlternatives;
             this.onFatalError = onFatalError;
             this.onState = onState;
             this.onOutput = onOutput;
+            this.onLocalModeUnusable = onLocalModeUnusable;
             this.Recognition = globalThis.SpeechRecognition || globalThis.webkitSpeechRecognition;
             this.recognition = null;
             this.enabled = false;
@@ -375,6 +422,11 @@
             this.speechGeneration = 0;
             this.activeSpeechFinish = null;
             this.phraseHints = [];
+            this.stallTimer = null;
+            this.sawSpeechThisSession = false;
+            this.deliveredResultThisSession = false;
+            this.stalledSessions = 0;
+            this.primeVoices();
         }
 
         static getRecognitionConstructor() {
@@ -383,6 +435,120 @@
 
         setState(state) {
             this.onState?.(state);
+        }
+
+        clearStallWatchdog() {
+            if (this.stallTimer) {
+                window.clearTimeout(this.stallTimer);
+                this.stallTimer = null;
+            }
+        }
+
+        /**
+         * Chrome's on-device recognizer can swallow an utterance whole: it fires
+         * audiostart/soundstart/speechstart/speechend/audioend and then never
+         * delivers a result, an error, or even `end`. The session hangs, so
+         * `isRecognitionActive` stays true and every later startListening() is a
+         * no-op — the extension goes permanently deaf after one sentence.
+         */
+        armStallWatchdog(recognition) {
+            this.clearStallWatchdog();
+            this.stallTimer = window.setTimeout(() => {
+                this.stallTimer = null;
+                if (recognition !== this.recognition || !this.enabled) {
+                    return;
+                }
+                warn("sessão travada: fala capturada, nenhum resultado e nenhum fim de sessão");
+                this.noteUnproductiveSession(recognition, { hung: true });
+            }, STALL_TIMEOUT_MS);
+        }
+
+        restartWithFreshRecognizer() {
+            this.createRecognition();
+            this.wantsListening = true;
+            this.startListening();
+        }
+
+        /**
+         * Called when a session captured speech but produced no transcript,
+         * either by hanging outright (`hung`) or by ending empty-handed.
+         * Escalates one step at a time, cheapest first.
+         */
+        noteUnproductiveSession(recognition, { hung }) {
+            this.stalledSessions += 1;
+            this.clearStallWatchdog();
+            // Consume the evidence. Aborting a hung session fires `end` on the
+            // way out, which used to re-enter here and escalate a second time
+            // for the very same utterance.
+            this.sawSpeechThisSession = false;
+
+            if (hung) {
+                // A hung session never ends on its own, so it has to be replaced
+                // rather than waited on.
+                this.abortedRecognitions.add(recognition);
+                try {
+                    recognition.abort();
+                } catch (_error) {
+                    // A wedged recognizer may refuse to abort; the replacement
+                    // below is what actually restores service.
+                }
+                this.isRecognitionActive = false;
+                this.recognitionStartPending = false;
+            }
+
+            if (!this.enabled) {
+                return;
+            }
+
+            // A single empty session is ordinary; a hang never is.
+            const escalate = hung || this.stalledSessions >= 2;
+
+            if (!escalate) {
+                if (this.wantsListening) {
+                    this.scheduleRestart();
+                }
+                return;
+            }
+
+            // Contextual phrase hints are progressive enhancement and the newest
+            // moving part in the stack, so they are the first thing dropped —
+            // but only when they were actually in play.
+            if (PHRASE_HINTS_ENABLED && !this.phraseHintsDisabled) {
+                warn("desligando as dicas contextuais e tentando de novo");
+                this.phraseHintsDisabled = true;
+                this.setState("preparing");
+                this.restartWithFreshRecognizer();
+                return;
+            }
+
+            // Online is the last thing left to try, and it costs a consent
+            // dialog, so it comes last.
+            if (this.localMode) {
+                warn("o reconhecimento no dispositivo não transcreve; pedindo troca para online");
+                this.onLocalModeUnusable?.();
+                return;
+            }
+
+            // Seen in practice on a profile whose speech service had gone bad:
+            // the audio pipeline kept working while every recognition session
+            // hung, and a browser restart fixed it outright.
+            this.fail(
+                "O Chrome captura seu áudio mas nunca devolve a transcrição. Reinicie o navegador — "
+                + "isso costuma resolver. Se voltar a acontecer, confira em chrome://settings/languages "
+                + "se português (Brasil) está instalado.",
+            );
+        }
+
+        useOnlineRecognition() {
+            debug("trocando para reconhecimento online");
+            this.localMode = false;
+            // Hints stay off: if they were dropped because a session hung, the
+            // new mode is not a reason to trust them again.
+            this.stalledSessions = 0;
+            this.clearStallWatchdog();
+            this.createRecognition();
+            // The caller announces the switch; speak({ resume: true }) is what
+            // reopens the microphone, so starting it here would only race.
         }
 
         activate({ localMode }) {
@@ -395,6 +561,7 @@
             this.networkErrors = 0;
             this.otherErrors = 0;
             this.phraseHintsDisabled = false;
+            this.stalledSessions = 0;
             this.createRecognition();
         }
 
@@ -411,6 +578,37 @@
             }
             if ("quality" in recognition) {
                 recognition.quality = "command";
+            }
+
+            debug("reconhecedor criado", {
+                lang: recognition.lang,
+                continuous: recognition.continuous,
+                interimResults: recognition.interimResults,
+                maxAlternatives: recognition.maxAlternatives,
+                processLocally: "processLocally" in recognition ? recognition.processLocally : "não suportado",
+                suportaPhrases: "phrases" in recognition,
+                SpeechRecognitionPhrase: typeof globalThis.SpeechRecognitionPhrase,
+            });
+
+            // Full audio pipeline tracing. These events answer the only question
+            // that matters when the microphone is open but nothing is recognized:
+            // audiostart without soundstart  -> capturing silence (wrong input device)
+            // soundstart without speechstart -> sound arrives but is not speech
+            // speechstart without result     -> speech heard, transcription failed
+            for (const eventName of ["audiostart", "soundstart", "speechstart", "speechend", "soundend", "audioend", "nomatch"]) {
+                recognition.addEventListener?.(eventName, () => {
+                    debug("evento de áudio:", eventName);
+
+                    if (eventName === "speechstart") {
+                        this.sawSpeechThisSession = true;
+                    }
+
+                    // Once the utterance is over, a working recognizer owes us a
+                    // result, an error or `end` within a couple of seconds.
+                    if ((eventName === "speechend" || eventName === "audioend") && this.sawSpeechThisSession) {
+                        this.armStallWatchdog(recognition);
+                    }
+                });
             }
 
             recognition.onstart = () => {
@@ -436,16 +634,30 @@
                 }
                 this.recognitionStartPending = false;
                 this.isRecognitionActive = true;
+                this.sawSpeechThisSession = false;
+                this.deliveredResultThisSession = false;
+                // A session that actually opens clears the backoff. Otherwise a
+                // run of no-speech events pushed the restart delay to 4s of
+                // dead microphone while the button still read "listening".
+                this.restartAttempts = 0;
                 this.setState("listening");
             };
 
             recognition.onresult = (event) => {
+                debug("onresult", {
+                    resultIndex: event.resultIndex,
+                    total: event.results?.length,
+                    reconhecedorAtual: recognition === this.recognition,
+                    enabled: this.enabled,
+                });
                 if (recognition !== this.recognition || !this.enabled) {
+                    warn("resultado descartado: reconhecedor superado ou desativado");
                     return;
                 }
 
                 const result = event.results[event.resultIndex];
                 if (!result?.isFinal && result?.isFinal !== undefined) {
+                    debug("resultado parcial ignorado");
                     return;
                 }
 
@@ -459,6 +671,11 @@
                     });
                 }
 
+                debug("alternativas reconhecidas:", alternatives);
+
+                this.clearStallWatchdog();
+                this.deliveredResultThisSession = true;
+                this.stalledSessions = 0;
                 this.restartAttempts = 0;
                 this.networkErrors = 0;
                 this.otherErrors = 0;
@@ -480,6 +697,8 @@
                 }
 
                 const code = event.error || "unknown";
+                debug("erro do reconhecedor:", code);
+                this.clearStallWatchdog();
                 if (this.abortedRecognitions.has(recognition) || code === "aborted") {
                     this.abortedRecognitions.delete(recognition);
                     return;
@@ -533,12 +752,33 @@
             };
 
             recognition.onend = () => {
+                debug("onend", {
+                    reconhecedorAtual: recognition === this.recognition,
+                    enabled: this.enabled,
+                    wantsListening: this.wantsListening,
+                    restartAttempts: this.restartAttempts,
+                });
                 if (recognition !== this.recognition) {
                     return;
                 }
+                this.clearStallWatchdog();
+                const wasAborted = this.abortedRecognitions.has(recognition);
                 this.abortedRecognitions.delete(recognition);
                 this.recognitionStartPending = false;
                 this.isRecognitionActive = false;
+
+                // Speech went in, nothing came out. Ending cleanly is better
+                // than hanging, but it is still a failure worth escalating.
+                // A session we aborted ourselves does not count.
+                if (this.enabled
+                    && this.sawSpeechThisSession
+                    && !this.deliveredResultThisSession
+                    && !wasAborted) {
+                    warn("sessão encerrada com fala capturada mas sem transcrição");
+                    this.noteUnproductiveSession(recognition, { hung: false });
+                    return;
+                }
+
                 if (this.enabled && this.wantsListening) {
                     this.scheduleRestart();
                 }
@@ -562,7 +802,7 @@
         }
 
         applyPhraseHints() {
-            if (this.phraseHintsDisabled || !this.recognition || !("phrases" in this.recognition)) {
+            if (!PHRASE_HINTS_ENABLED || this.phraseHintsDisabled || !this.recognition || !("phrases" in this.recognition)) {
                 return;
             }
             const Phrase = globalThis.SpeechRecognitionPhrase;
@@ -571,21 +811,30 @@
             }
             try {
                 this.recognition.phrases = this.phraseHints.map((phrase) => new Phrase(phrase, 3));
-            } catch (_error) {
+                debug("dicas contextuais aplicadas:", this.phraseHints.length);
+            } catch (error) {
                 // Contextual biasing is progressive enhancement.
+                warn("dicas contextuais recusadas:", safeErrorMessage(error));
             }
         }
 
         startListening() {
             if (!this.enabled || !this.recognition) {
+                debug("startListening ignorado", { enabled: this.enabled, temReconhecedor: Boolean(this.recognition) });
                 return;
             }
             this.wantsListening = true;
             if (this.isRecognitionActive || this.recognitionStartPending || this.restartTimer) {
+                debug("startListening já em andamento", {
+                    isRecognitionActive: this.isRecognitionActive,
+                    recognitionStartPending: this.recognitionStartPending,
+                    restartTimer: Boolean(this.restartTimer),
+                });
                 return;
             }
             this.applyPhraseHints();
             this.recognitionStartPending = true;
+            debug("chamando recognition.start()");
             try {
                 this.recognition.start();
             } catch (error) {
@@ -610,6 +859,7 @@
 
         stopRecognition(abort = true) {
             this.wantsListening = false;
+            this.clearStallWatchdog();
             if (this.restartTimer) {
                 window.clearTimeout(this.restartTimer);
                 this.restartTimer = null;
@@ -631,11 +881,30 @@
             this.recognitionStartPending = false;
         }
 
+        primeVoices() {
+            const synthesis = globalThis.speechSynthesis;
+            if (!synthesis?.getVoices) {
+                return;
+            }
+            // Chrome fills the voice list asynchronously; the first call in a
+            // fresh renderer usually returns []. Without this the very first
+            // announcement — including "Modo Freedom ativo" — was always mute.
+            synthesis.getVoices();
+            synthesis.addEventListener?.("voiceschanged", () => {
+                debug("voiceschanged", synthesis.getVoices().length, "vozes disponíveis");
+            }, { once: true });
+        }
+
         chooseVoice() {
             const voices = globalThis.speechSynthesis?.getVoices?.() || [];
+            const isPortuguese = (voice) => Boolean(voice.lang?.toLowerCase().startsWith("pt"));
+            // A local voice is preferred for privacy, but a remote Portuguese
+            // voice beats silence. A non-Portuguese voice is never used: leaving
+            // utterance.voice unset lets Chrome honour utterance.lang instead.
             return voices.find((voice) => voice.lang?.toLowerCase() === "pt-br" && voice.localService === true)
-                || voices.find((voice) => voice.lang?.toLowerCase().startsWith("pt") && voice.localService === true)
-                || voices.find((voice) => voice.localService === true)
+                || voices.find((voice) => isPortuguese(voice) && voice.localService === true)
+                || voices.find((voice) => voice.lang?.toLowerCase() === "pt-br")
+                || voices.find(isPortuguese)
                 || null;
         }
 
@@ -648,7 +917,10 @@
                 this.onOutput?.(message);
             }
             const voice = message ? this.chooseVoice() : null;
-            if (!message || !voice || !globalThis.speechSynthesis || !globalThis.SpeechSynthesisUtterance) {
+            if (message && !voice) {
+                debug("nenhuma voz pt disponível; usando utterance.lang para", message);
+            }
+            if (!message || !globalThis.speechSynthesis || !globalThis.SpeechSynthesisUtterance) {
                 if (resume && this.enabled) {
                     this.startListening();
                 }
@@ -668,7 +940,9 @@
                 utterance.rate = 1.08;
                 utterance.pitch = 1;
                 utterance.volume = 1;
-                utterance.voice = voice;
+                if (voice) {
+                    utterance.voice = voice;
+                }
 
                 let finished = false;
                 let timeoutId;
@@ -699,13 +973,37 @@
                     }
                     resolve();
                 };
-                timeoutId = window.setTimeout(() => finish(true), Math.max(6000, message.length * 140));
+                // Two-stage watchdog. If synthesis never even starts, give the
+                // microphone back in two seconds instead of holding it closed
+                // for the full estimated duration of speech that never happened.
+                timeoutId = window.setTimeout(() => {
+                    debug("síntese não iniciou em 2s; devolvendo o microfone");
+                    finish(true);
+                }, 2000);
                 this.activeSpeechFinish = finish;
 
+                utterance.onstart = () => {
+                    window.clearTimeout(timeoutId);
+                    timeoutId = window.setTimeout(
+                        () => finish(true),
+                        Math.min(Math.max(4000, message.length * 110), 15000),
+                    );
+                };
                 utterance.onend = () => finish(false);
                 utterance.onerror = () => finish(true);
                 try {
-                    globalThis.speechSynthesis.speak(utterance);
+                    // cancel() immediately followed by speak() in the same task
+                    // makes Chromium drop the utterance. One tick apart is enough.
+                    window.setTimeout(() => {
+                        if (finished) {
+                            return;
+                        }
+                        try {
+                            globalThis.speechSynthesis.speak(utterance);
+                        } catch (_error) {
+                            finish(true);
+                        }
+                    }, 0);
                 } catch (_error) {
                     finish(true);
                 }
@@ -741,6 +1039,8 @@
             this.queuedState = null;
             this.activationGeneration = 0;
             this.voiceState = "disabled";
+            this.switchingRecognitionMode = false;
+            this.boardMisses = 0;
 
             this.ui = new FreedomUi(() => this.toggle());
             this.bridge = new SiteBridge((state) => this.handleStateChanged(state));
@@ -755,6 +1055,7 @@
                     }
                 },
                 onOutput: (message) => this.ui.announceStatus(message),
+                onLocalModeUnusable: () => this.handleLocalModeUnusable(),
             });
 
             this.handleRuntimeMessage = this.handleRuntimeMessage.bind(this);
@@ -782,6 +1083,7 @@
                 const board = document.querySelector("wc-chess-board");
                 const controls = document.querySelector(".board-layout-controls");
                 if (board) {
+                    this.boardMisses = 0;
                     let fallback = document.getElementById(FALLBACK_CONTROLS_ID);
                     if (!controls && !fallback) {
                         fallback = document.createElement("div");
@@ -799,7 +1101,18 @@
                         fallback.remove();
                     }
                 } else if (this.enabled && !board) {
-                    this.disable({ announce: false });
+                    // A single tick without a board is normal while Chess.com
+                    // re-renders. Killing the session on the first miss shut the
+                    // extension down mid-game without a word.
+                    this.boardMisses = (this.boardMisses || 0) + 1;
+                    if (this.boardMisses >= MISSING_BOARD_TOLERANCE) {
+                        this.boardMisses = 0;
+                        warn("tabuleiro ausente por", MISSING_BOARD_TOLERANCE, "verificações; desativando");
+                        this.disable({
+                            announce: true,
+                            reason: "O tabuleiro saiu da tela. Modo Freedom desativado.",
+                        });
+                    }
                 } else {
                     document.getElementById(FALLBACK_CONTROLS_ID)?.remove();
                 }
@@ -860,6 +1173,7 @@
                     throw new Error(claim?.error || "Não foi possível reservar o microfone para esta aba.");
                 }
 
+                debug("ativando com reconhecimento", localMode ? "local (no dispositivo)" : "online (servidor do navegador)");
                 this.voice.activate({ localMode });
                 this.enabled = true;
                 this.lastAnnouncedMove = moveKey(state.lastMove);
@@ -868,6 +1182,8 @@
                 this.updatePhraseHints(state);
                 await sendRuntimeMessage({ type: "freedomChess:audio:state", enabled: true });
                 if (!isCurrent() || !this.enabled) {
+                    warn("ativação abortada após reservar o microfone; enabled =", this.enabled);
+                    this.ui.announceStatus("A ativação foi interrompida. Clique novamente para tentar de novo.");
                     return;
                 }
                 await this.voice.speak(
@@ -986,6 +1302,10 @@
                 return null;
             }
 
+            // Availability is only a claim: it reported "available" on a profile
+            // where recognition then hung forever until the browser restarted.
+            debug("disponibilidade do pacote pt-BR local:", availability);
+
             if (availability === "available") {
                 return true;
             }
@@ -1044,6 +1364,49 @@
             }
         }
 
+        /**
+         * The on-device recognizer reported the pt-BR pack as available but is
+         * not transcribing. Online recognition is the only remaining option, and
+         * it sends audio to the browser vendor — so it needs consent, exactly
+         * like the consent asked for at activation time.
+         */
+        async handleLocalModeUnusable() {
+            if (this.switchingRecognitionMode || !this.enabled) {
+                return;
+            }
+            this.switchingRecognitionMode = true;
+            const generation = this.activationGeneration;
+
+            try {
+                this.voice.stopRecognition(true);
+                this.ui.announceStatus("O reconhecimento local não devolveu nenhuma transcrição.");
+
+                const useOnline = await this.ui.showConfirmation({
+                    title: "O reconhecimento local não está funcionando",
+                    message: "O Chrome capturou sua fala mas não devolveu nenhuma transcrição usando o pacote pt-BR no dispositivo. Deseja mudar para o reconhecimento online? Nesse modo o navegador pode enviar o áudio ao serviço de reconhecimento dele. Nenhuma API paga será usada.",
+                    confirmLabel: "Usar online",
+                    cancelLabel: "Desativar",
+                });
+
+                if (!this.isSessionCurrent(generation)) {
+                    return;
+                }
+
+                if (!useOnline) {
+                    await this.disable({
+                        announce: true,
+                        reason: "Modo Freedom desativado. O reconhecimento local não está transcrevendo neste dispositivo.",
+                    });
+                    return;
+                }
+
+                this.voice.useOnlineRecognition();
+                await this.voice.speak("Mudando para reconhecimento online. Diga seu lance.", { resume: true });
+            } finally {
+                this.switchingRecognitionMode = false;
+            }
+        }
+
         handleFatalVoiceError(error) {
             const message = safeErrorMessage(error);
             this.disable({ announce: false });
@@ -1064,7 +1427,10 @@
                 "roque pequeno",
                 "roque grande",
             ];
-            const moves = (state?.legalMoves || []).map((move) => Core.verbalizeMove(move));
+            // Hints must be what a player says ("cavalo f3"), not what the
+            // synthesizer reads back ("Cavalo de gê um para efe três"). The old
+            // form biased the recognizer away from every real command.
+            const moves = (state?.legalMoves || []).flatMap((move) => Core.spokenMoveVariants(move));
             this.voice.updatePhraseHints([...base, ...moves]);
         }
 
@@ -1169,11 +1535,14 @@
                 this.assertUsableState(state);
                 this.currentState = state;
 
+                debug("transcrições", alternatives.map((alternative) => alternative.transcript));
+
                 const matches = [];
                 let ambiguousCandidates = [];
                 for (const alternative of alternatives) {
                     const intent = Core.parseMoveIntent(alternative.transcript);
                     const result = Core.matchMoveIntent(intent, state.legalMoves);
+                    debug("intenção", alternative.transcript, "->", intent.normalized, intent.reason || "", "=>", result.status);
                     if (result.status === "matched") {
                         matches.push(result.move);
                     } else if (result.status === "ambiguous") {
@@ -1197,9 +1566,33 @@
                     return;
                 }
 
-                if (this.isSessionCurrent(generation)) {
-                    await this.voice.speak("Não encontrei um lance legal correspondente. Tente novamente.", { resume: true });
+                if (!this.isSessionCurrent(generation)) {
+                    return;
                 }
+
+                const heard = alternatives[0]?.transcript || "";
+                this.ui.announceStatus(
+                    `Ouvi "${heard}" (interpretado como "${Core.normalizeSpeech(heard)}") — nenhum lance legal corresponde.`,
+                );
+                warn("nenhum lance legal para", alternatives.map((alternative) => alternative.transcript));
+
+                // Exact matching alone has no graceful degradation: a single
+                // misheard syllable used to fail outright. Offer the closest
+                // legal move instead — never silently, always confirmed first.
+                const suggestions = alternatives
+                    .flatMap((alternative) => Core.rankMovesBySpeech(alternative.transcript, state.legalMoves, { limit: 1 }))
+                    .sort((left, right) => right.score - left.score);
+                const suggestion = suggestions[0];
+                if (suggestion) {
+                    debug("sugestão aproximada", Core.verbalizeMove(suggestion.move), suggestion.score);
+                    await this.confirmAndMakeMove(suggestion.move, generation, { approximate: heard });
+                    return;
+                }
+
+                await this.voice.speak(
+                    `Não encontrei um lance legal para ${heard}. Tente novamente.`,
+                    { resume: true },
+                );
             } catch (error) {
                 if (this.isSessionCurrent(generation)) {
                     await this.voice.speak(`Não consegui processar o lance. ${safeErrorMessage(error)}.`, { resume: true });
@@ -1350,16 +1743,19 @@
             return resultPromise;
         }
 
-        async confirmAndMakeMove(move, generation = this.activationGeneration) {
+        async confirmAndMakeMove(move, generation = this.activationGeneration, { approximate = "" } = {}) {
             const isCurrent = () => this.isSessionCurrent(generation);
             if (!isCurrent()) {
                 return;
             }
             const description = Core.verbalizeMove(move);
+            const question = approximate
+                ? `Não entendi "${approximate}" com certeza. Você quis dizer ${description}?`
+                : `Confirma ${description}?`;
             const confirmed = await this.askConfirmation({
-                title: "Confirmar lance",
-                message: `Confirma ${description}?`,
-                spoken: `Confirma ${description}?`,
+                title: approximate ? "Confirmar lance aproximado" : "Confirmar lance",
+                message: question,
+                spoken: question,
                 confirmLabel: "Fazer lance",
                 cancelLabel: "Cancelar",
             });

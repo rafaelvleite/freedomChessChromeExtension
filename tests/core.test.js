@@ -18,6 +18,8 @@ test("exports the same pure API in CommonJS and a browser global", () => {
         "matchMoveIntent",
         "normalizeSpeech",
         "parseMoveIntent",
+        "rankMovesBySpeech",
+        "spokenMoveVariants",
         "verbalizeMove"
     ]);
 
@@ -252,6 +254,130 @@ test("verbalizes squares and verbose moves in Brazilian Portuguese", () => {
         core.verbalizeMove(move("e1", "c1", "k", { flags: "q", san: "O-O-O" })),
         "Roque longo"
     );
+});
+
+test("understands the capitalized transcripts Chrome actually produces", () => {
+    // Chrome capitalizes the first word of every recognition result. Protecting
+    // SAN symbols before case folding turned "Rei g1" into the rook symbol and
+    // broke every spoken piece name; the whole suite used to be lowercase only.
+    const legalMoves = [
+        move("e1", "f1", "k", { san: "Kf1" }),
+        move("d1", "h5", "q", { san: "Qh5" }),
+        move("e2", "e4", "p", { flags: 4, san: "e4" }),
+        move("f1", "b5", "b", { san: "Bb5" }),
+        move("a3", "b4", "p", { san: "b4" }),
+        move("g1", "f3", "n", { san: "Nf3" })
+    ];
+
+    const cases = [
+        ["Rei f1", "Kf1"],
+        ["Rainha h5", "Qh5"],
+        ["Peão e4", "e4"],
+        ["Peão para e quatro", "e4"],
+        ["Bispo B5", "Bb5"],
+        ["B4", "b4"],
+        ["Cavalo efe três", "Nf3"],
+        ["Cavalo F3", "Nf3"]
+    ];
+
+    for (const [speech, san] of cases) {
+        const result = core.matchMoveIntent(core.parseMoveIntent(speech), legalMoves);
+        assert.equal(result.status, "matched", speech);
+        assert.equal(result.move.san, san, speech);
+    }
+
+    // Written SAN, including rank/file disambiguation, must keep working.
+    for (const [speech, san] of [["Nf3", "Nf3"], ["Qh5", "Qh5"], ["Bb5", "Bb5"]]) {
+        const result = core.matchMoveIntent(core.parseMoveIntent(speech), legalMoves);
+        assert.equal(result.status, "matched", speech);
+        assert.equal(result.move.san, san, speech);
+    }
+});
+
+test("reads the numeric move flags Chess.com sends, not only chess.js letters", () => {
+    assert.equal(core.verbalizeMove({ from: "e1", to: "g1", piece: "k", flags: 32 }), "Roque curto");
+    assert.equal(core.verbalizeMove({ from: "e1", to: "c1", piece: "k", flags: 64 }), "Roque longo");
+
+    // Capture detection used to depend entirely on `san` containing an "x".
+    assert.equal(
+        core.verbalizeMove({ from: "f3", to: "e5", piece: "n", flags: 2 }),
+        "Cavalo de efe três captura é cinco"
+    );
+    assert.equal(
+        core.verbalizeMove({ from: "d5", to: "e6", piece: "p", flags: 8 }),
+        "Peão de dê cinco captura é seis"
+    );
+
+    const numericCapture = { from: "f3", to: "e5", piece: "n", flags: 2 };
+    const result = core.matchMoveIntent(core.parseMoveIntent("cavalo captura é cinco"), [numericCapture]);
+    assert.equal(result.status, "matched");
+
+    // A quiet numeric move must not be mistaken for a capture.
+    assert.equal(
+        core.matchMoveIntent(core.parseMoveIntent("cavalo captura é cinco"), [
+            { from: "f3", to: "e5", piece: "n", flags: 1 }
+        ]).status,
+        "no-match"
+    );
+});
+
+test("treats x as a capture marker only when it stands alone", () => {
+    assert.equal(core.normalizeSpeech("xeque"), "xeque");
+    assert.equal(core.normalizeSpeech("proximo"), "proximo");
+    assert.equal(core.normalizeSpeech("exato"), "exato");
+    assert.equal(core.normalizeSpeech("cavalo x e5"), "N x e5");
+});
+
+test("suggests the closest legal move for a garbled transcript, never silently", () => {
+    const knight = move("g1", "f3", "n", { san: "Nf3" });
+    const bishop = move("f1", "c4", "b", { san: "Bc4" });
+    const castle = move("e1", "g1", "k", { flags: 32, san: "O-O" });
+    const legalMoves = [knight, bishop, castle];
+
+    for (const [speech, expected] of [
+        ["cavalo éfi três", knight],
+        ["cavalo efe treis", knight],
+        ["bispo cê quatru", bishop],
+        ["roqui curto", castle]
+    ]) {
+        const ranked = core.rankMovesBySpeech(speech, legalMoves);
+        assert.ok(ranked.length > 0, speech);
+        assert.equal(ranked[0].move, expected, speech);
+        assert.ok(ranked[0].score >= 0.6, speech);
+    }
+
+    // Unrelated speech must not produce a suggestion at all.
+    assert.deepEqual(core.rankMovesBySpeech("qual é o placar do jogo", legalMoves), []);
+    assert.deepEqual(core.rankMovesBySpeech("", legalMoves), []);
+    assert.deepEqual(core.rankMovesBySpeech("cavalo f3", null), []);
+});
+
+test("hints the recognizer with phrases a player says, not synthesizer output", () => {
+    assert.deepEqual(core.spokenMoveVariants(move("g1", "f3", "n", { san: "Nf3" })), [
+        "cavalo f3",
+        "cavalo efe três",
+        "cavalo de g1 para f3",
+        "cavalo de gê um para efe três"
+    ]);
+
+    // Pawns are named by their square alone, the way players speak.
+    assert.deepEqual(core.spokenMoveVariants(move("e2", "e4", "p", { flags: 4, san: "e4" })), [
+        "e4",
+        "é quatro",
+        "de e2 para e4",
+        "de é dois para é quatro"
+    ]);
+
+    assert.deepEqual(
+        core.spokenMoveVariants(move("e1", "c1", "k", { flags: 64, san: "O-O-O" })),
+        ["roque longo", "roque grande"]
+    );
+
+    assert.ok(
+        core.spokenMoveVariants(move("f3", "e5", "n", { flags: 2, san: "Nxe5" }))
+            .includes("cavalo captura e5")
+    );
+    assert.deepEqual(core.spokenMoveVariants(null), []);
 });
 
 test("returns stable no-match results for malformed or absent input", () => {

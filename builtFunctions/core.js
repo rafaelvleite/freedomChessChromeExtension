@@ -63,6 +63,25 @@
 
     var PROMOTION_PIECES = { Q: "q", R: "r", B: "b", N: "n" };
 
+    // Chess.com forwards chess.js move flags as a numeric bitmask, while chess.js
+    // itself uses the letter form. Both have to be understood.
+    var FLAG_BITS = {
+        capture: 2,
+        epCapture: 8,
+        promotion: 16,
+        kingsideCastle: 32,
+        queensideCastle: 64
+    };
+
+    function numericFlags(move) {
+        var flags = move && move.flags;
+        return typeof flags === "number" && isFinite(flags) ? flags : 0;
+    }
+
+    function letterFlags(move) {
+        return move && typeof move.flags === "string" ? move.flags : "";
+    }
+
     function replaceWords(value, words, replacement) {
         var expression = new RegExp("\\b(?:" + words.join("|") + ")\\b", "g");
         return value.replace(expression, replacement);
@@ -78,7 +97,10 @@
             P: "__piece_p__"
         };
 
-        return value.replace(/(^|[\s=])([KQRBNP])(?=[a-h1-8x\s=]|$)/g, function (_, prefix, piece) {
+        // The lookahead must require a real square. Chrome capitalizes the first
+        // word of every transcript, so a loose lookahead turns "Rei g1" into the
+        // rook symbol and "Peão e4" into a stray pawn symbol.
+        return value.replace(/(^|[\s=])([KQRBNP])(?=[a-h]?[1-8]?x?[a-h][1-8]|\s|=|$)/g, function (_, prefix, piece) {
             return prefix + placeholders[piece] + " ";
         });
     }
@@ -93,7 +115,7 @@
             return "";
         }
 
-        var value = protectWrittenPieceSymbols(String(input).trim());
+        var value = String(input).trim();
         if (!value) {
             return "";
         }
@@ -101,6 +123,11 @@
         if (typeof value.normalize === "function") {
             value = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         }
+
+        // Piece symbols are protected after accent folding but before lowercasing.
+        // Doing it on the raw transcript destroyed every capitalized Portuguese
+        // piece name the recognizer produces ("Rei", "Rainha", "Pe\u00e3o").
+        value = protectWrittenPieceSymbols(value);
         value = value.toLowerCase();
 
         // Protect castling before punctuation and hyphens are discarded.
@@ -186,7 +213,9 @@
             .replace(/[×]/g, " x ")
             .replace(/[,+#!?;:()[\]{}'\"./\\]/g, " ")
             .replace(/-/g, " ")
-            .replace(/\s*x\s*/g, " x ")
+            // Only a standalone "x" is a capture marker. Without the word
+            // boundaries this rewrote "xeque" as "x eque" and "exato" as "e x ato".
+            .replace(/\s*\bx\b\s*/g, " x ")
             .replace(/\s*=\s*/g, " = ")
             .replace(/__castle_queen__/g, " O-O-O ")
             .replace(/__castle_king__/g, " O-O ")
@@ -350,7 +379,12 @@
 
     function moveCastleSide(move) {
         if (!move || typeof move !== "object") { return null; }
-        var flags = String(move.flags || "");
+
+        var bits = numericFlags(move);
+        if (bits & FLAG_BITS.queensideCastle) { return "queen"; }
+        if (bits & FLAG_BITS.kingsideCastle) { return "king"; }
+
+        var flags = letterFlags(move);
         if (flags.indexOf("q") !== -1) { return "queen"; }
         if (flags.indexOf("k") !== -1) { return "king"; }
 
@@ -379,7 +413,9 @@
 
     function isCapture(move) {
         if (!move) { return false; }
-        return Boolean(move.captured) || /[ce]/.test(String(move.flags || "")) || String(move.san || "").indexOf("x") !== -1;
+        if (move.captured) { return true; }
+        if (numericFlags(move) & (FLAG_BITS.capture | FLAG_BITS.epCapture)) { return true; }
+        return /[ce]/.test(letterFlags(move)) || String(move.san || "").indexOf("x") !== -1;
     }
 
     /**
@@ -490,11 +526,150 @@
         return phrase + moveCheckSuffix(move);
     }
 
+    /**
+     * The phrases a Brazilian player actually says for a move. These are the
+     * strings worth feeding to the recognizer as contextual hints, and the ones
+     * to compare a garbled transcript against. `verbalizeMove` output is not:
+     * nobody says "Cavalo de gê um para efe três".
+     */
+    function spokenMoveVariants(move) {
+        if (!move || typeof move !== "object") {
+            return [];
+        }
+
+        var castle = moveCastleSide(move);
+        if (castle) {
+            return castle === "queen"
+                ? ["roque longo", "roque grande"]
+                : ["roque curto", "roque pequeno"];
+        }
+
+        var piece = String(move.piece || "").toLowerCase();
+        var to = String(move.to || "").toLowerCase();
+        var from = String(move.from || "").toLowerCase();
+        if (!PIECE_WORDS[piece] || !/^[a-h][1-8]$/.test(to)) {
+            return [];
+        }
+
+        var pieceWord = piece === "p" ? "" : PIECE_WORDS[piece].toLowerCase() + " ";
+        var spelled = formatSquare(to);
+        var link = isCapture(move) ? "captura " : "";
+        var variants = [
+            pieceWord + link + to,
+            pieceWord + link + spelled
+        ];
+
+        if (/^[a-h][1-8]$/.test(from)) {
+            variants.push(pieceWord + "de " + from + " para " + to);
+            variants.push(pieceWord + "de " + formatSquare(from) + " para " + spelled);
+        }
+
+        var promotion = movePromotion(move);
+        if (promotion && PIECE_WORDS[promotion]) {
+            var promotionWord = " promoção " + PIECE_WORDS[promotion].toLowerCase();
+            variants = variants.map(function (variant) {
+                return variant + promotionWord;
+            });
+        }
+
+        return variants;
+    }
+
+    function foldText(value) {
+        var folded = String(value === null || value === undefined ? "" : value);
+        if (typeof folded.normalize === "function") {
+            folded = folded.normalize("NFD").replace(/[̀-ͯ]/g, "");
+        }
+        return folded
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    function levenshtein(left, right) {
+        if (left === right) { return 0; }
+        if (!left.length) { return right.length; }
+        if (!right.length) { return left.length; }
+
+        var previous = new Array(right.length + 1);
+        for (var column = 0; column <= right.length; column += 1) {
+            previous[column] = column;
+        }
+
+        for (var row = 1; row <= left.length; row += 1) {
+            var current = [row];
+            for (var index = 1; index <= right.length; index += 1) {
+                var cost = left.charAt(row - 1) === right.charAt(index - 1) ? 0 : 1;
+                current[index] = Math.min(
+                    current[index - 1] + 1,
+                    previous[index] + 1,
+                    previous[index - 1] + cost
+                );
+            }
+            previous = current;
+        }
+
+        return previous[right.length];
+    }
+
+    function similarity(left, right) {
+        var longest = Math.max(left.length, right.length);
+        if (!longest) { return 0; }
+        return (longest - levenshtein(left, right)) / longest;
+    }
+
+    /**
+     * Best-effort rescue for a transcript that matched no legal move exactly.
+     * It never decides anything on its own: callers must confirm the suggestion
+     * with the player before touching the board.
+     */
+    function rankMovesBySpeech(transcript, moves, options) {
+        var settings = options || {};
+        var minimumScore = typeof settings.minimumScore === "number" ? settings.minimumScore : 0.6;
+        var limit = typeof settings.limit === "number" ? settings.limit : 3;
+
+        var spokenRaw = foldText(transcript);
+        var spokenNormalized = foldText(normalizeSpeech(transcript));
+        if (!spokenRaw || !Array.isArray(moves)) {
+            return [];
+        }
+
+        var ranked = [];
+        for (var index = 0; index < moves.length; index += 1) {
+            var move = moves[index];
+            var variants = spokenMoveVariants(move);
+            var best = 0;
+
+            for (var variant = 0; variant < variants.length; variant += 1) {
+                var candidateRaw = foldText(variants[variant]);
+                var candidateNormalized = foldText(normalizeSpeech(variants[variant]));
+                if (candidateRaw) {
+                    best = Math.max(best, similarity(spokenRaw, candidateRaw));
+                }
+                if (candidateNormalized && spokenNormalized) {
+                    best = Math.max(best, similarity(spokenNormalized, candidateNormalized));
+                }
+            }
+
+            if (best >= minimumScore) {
+                ranked.push({ move: move, score: best });
+            }
+        }
+
+        ranked.sort(function (left, right) {
+            return right.score - left.score;
+        });
+        return ranked.slice(0, Math.max(1, limit));
+    }
+
     return {
         normalizeSpeech: normalizeSpeech,
         parseMoveIntent: parseMoveIntent,
         matchMoveIntent: matchMoveIntent,
         verbalizeMove: verbalizeMove,
-        formatSquare: formatSquare
+        formatSquare: formatSquare,
+        spokenMoveVariants: spokenMoveVariants,
+        rankMovesBySpeech: rankMovesBySpeech
     };
 }));

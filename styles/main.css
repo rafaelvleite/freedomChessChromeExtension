@@ -83,6 +83,36 @@
     width: 1px !important;
 }
 
+/*
+ * Every internal message used to land in a 1px clipped region, so a sighted
+ * user saw nothing at all when a command failed.
+ */
+.freedom-chess-status {
+    background: #1b1a18;
+    border-radius: 0.8rem;
+    bottom: 1.6rem;
+    color: #f4f2ef;
+    font: 600 1.4rem/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    left: 1.6rem;
+    max-width: min(42rem, 80vw);
+    opacity: 0;
+    padding: 1rem 1.4rem;
+    pointer-events: none;
+    position: fixed;
+    transition: opacity 0.15s ease;
+    z-index: 2147483644;
+}
+
+.freedom-chess-status[data-visible="true"] {
+    opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .freedom-chess-status {
+        transition: none;
+    }
+}
+
 .freedom-chess-dialog-overlay {
     align-items: center;
     background: rgb(0 0 0 / 62%);

@@ -79,12 +79,39 @@ async function clearOwner() {
   await chrome.storage.session.remove(AUDIO_OWNER_KEY);
 }
 
+function flagDeliveryFailure(tabId, error) {
+  // A swallowed delivery failure made a toolbar click a total no-op: the usual
+  // cause is a Chess.com tab loaded before the last extension reload.
+  globalThis.console?.warn?.('[FreedomChess] não foi possível falar com a aba', tabId, errorMessage(error));
+  try {
+    chrome.action?.setBadgeText?.({ tabId, text: '!' });
+    chrome.action?.setBadgeBackgroundColor?.({ tabId, color: '#c33b32' });
+    chrome.action?.setTitle?.({
+      tabId,
+      title: 'Freedom Chess não está ativo nesta aba. Recarregue a página do Chess.com.',
+    });
+  } catch (_badgeError) {
+    // Badge feedback is best-effort; the console warning already reported it.
+  }
+}
+
+function clearDeliveryFailure(tabId) {
+  try {
+    chrome.action?.setBadgeText?.({ tabId, text: '' });
+    chrome.action?.setTitle?.({ tabId, title: 'Alternar Freedom Chess' });
+  } catch (_badgeError) {
+    // Nothing to clear if the action API is unavailable.
+  }
+}
+
 async function sendToTab(tabId, message, options) {
   try {
     await chrome.tabs.sendMessage(tabId, message, options);
+    clearDeliveryFailure(tabId);
     return true;
-  } catch (_error) {
+  } catch (error) {
     // The tab may have navigated or closed between ownership checks.
+    flagDeliveryFailure(tabId, error);
     return false;
   }
 }
