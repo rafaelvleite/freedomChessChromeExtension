@@ -1,6 +1,6 @@
 {
   "name": "freedom-chess-extension",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Extensão de controle por voz para o Chess.com.",
   "scripts": {
