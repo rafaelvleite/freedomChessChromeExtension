@@ -228,10 +228,11 @@ test("a hung recognition session is replaced instead of deafening the extension"
     // Observed in the wild: audiostart/soundstart/speechstart/speechend/audioend
     // all fire and then nothing. Without `end`, isRecognitionActive stayed true
     // and every later startListening() was a silent no-op — permanently deaf
-    // after one sentence.
+    // after one sentence. The recovery is a fresh recognizer, never a switch to
+    // online recognition and never a spoken word.
     const { VoiceController, recognizers } = loadInternals();
-    let asked = 0;
-    const voice = new VoiceController({ onLocalModeUnusable: () => { asked += 1; } });
+    const spoken = [];
+    const voice = new VoiceController({ onOutput: (message) => spoken.push(message) });
     voice.activate({ localMode: true });
     voice.startListening();
 
@@ -241,36 +242,36 @@ test("a hung recognition session is replaced instead of deafening the extension"
     await new Promise((resolve) => setTimeout(resolve, 3300));
 
     assert.equal(recognizers[0].abortCalls >= 1, true, "the wedged session is aborted");
-    assert.equal(voice.isRecognitionActive, false, "the extension is not left deaf");
-    assert.equal(asked, 1, "on-device recognition that hangs offers the online mode");
+    assert.equal(recognizers.length >= 2, true, "a fresh recognizer replaces it");
+    assert.equal(recognizers.at(-1).startCalls >= 1, true, "the replacement starts listening");
+    assert.deepEqual(spoken, [], "the recovery is silent — nothing is announced");
     voice.disable();
 });
 
-test("aborting a hung session does not escalate the same utterance twice", async () => {
-    // stopRecognition() aborts, which fires `end` on the way out. That `end`
-    // used to look like a second unproductive session for one spoken sentence.
+test("a run of hangs eventually fails cleanly instead of churning forever", async () => {
+    // A single hang is replaced quietly, but a recognizer that hangs over and
+    // over is genuinely broken and must stop, with one actionable message and
+    // no mention of any online mode.
     const { VoiceController, recognizers } = loadInternals();
-    let asked = 0;
-    const voice = new VoiceController({ onLocalModeUnusable: () => { asked += 1; } });
+    let fatal = null;
+    const voice = new VoiceController({ onFatalError: (error) => { fatal = error; } });
     voice.activate({ localMode: true });
     voice.startListening();
 
-    recognizers[0].hangAfterSpeech();
-    await new Promise((resolve) => setTimeout(resolve, 3300));
-    assert.equal(asked, 1, "one utterance, one escalation");
+    for (let attempt = 0; attempt < 4 && !fatal; attempt += 1) {
+        recognizers.at(-1).hangAfterSpeech();
+        await new Promise((resolve) => setTimeout(resolve, 3300));
+    }
 
-    // The abort finally lands and the wedged recognizer reports `end`.
-    voice.stopRecognition(true);
-    recognizers[0].onend();
-
-    assert.equal(asked, 1, "the stale `end` must not escalate again");
-    voice.disable();
+    assert.ok(fatal, "a persistently broken recognizer is not retried forever");
+    assert.doesNotMatch(fatal.message, /online/i, "the failure never suggests an online mode");
+    assert.equal(voice.enabled, false);
 });
 
-test("a session that ends empty-handed once is simply retried", async () => {
+test("a session that ends empty-handed once is simply retried, silently", async () => {
     const { VoiceController, recognizers } = loadInternals();
-    let asked = 0;
-    const voice = new VoiceController({ onLocalModeUnusable: () => { asked += 1; } });
+    const spoken = [];
+    const voice = new VoiceController({ onOutput: (message) => spoken.push(message) });
     voice.activate({ localMode: true });
     voice.startListening();
 
@@ -280,9 +281,9 @@ test("a session that ends empty-handed once is simply retried", async () => {
     recognition.emit("speechend");
     recognition.onend();
 
-    assert.equal(asked, 0, "one empty session is ordinary, not a failure");
     assert.equal(voice.phraseHintsDisabled, false);
-    assert.equal(voice.stalledSessions, 1);
+    assert.equal(voice.hungSessions, 0, "an empty session is a silent player, not a hang");
+    assert.deepEqual(spoken, [], "the player thinking must never make the extension talk");
     voice.disable();
 });
 
@@ -315,15 +316,75 @@ test("a delivered result clears the stall bookkeeping", async () => {
     voice.disable();
 });
 
-test("affirmative confirmation requires the primary recognition alternative", () => {
+test("a yes is read the way people actually say it", () => {
+    const { FreedomChessApp } = loadInternals();
+    const app = Object.create(FreedomChessApp.prototype);
+    const value = (transcript) => app.confirmationValue({ transcript });
+
+    for (const yes of [
+        "sim", "Sim.", "SIM", "confirma", "Confirma!", "confirmar", "confirmo",
+        "pode", "pode fazer", "pode ser", "ok", "OK.", "isso", "isso aí",
+        "é isso aí", "isso mesmo", "positivo", "certo", "com certeza", "beleza",
+        "manda", "manda ver", "vai", "vai lá", "faz", "faz isso", "joga",
+        "claro", "exato", "afirmativo", "perfeito", "aham", "tá", "sim pode",
+        "cem", "sem", "assim",
+        // The mishearings that made the player repeat "confirma".
+        "comfirma", "confirmaa", "confirmar isso", "confirmá", "confirmado",
+    ]) {
+        assert.equal(value(yes), true, `"${yes}" deveria confirmar`);
+    }
+
+    for (const no of [
+        "muda", "mudar", "Muda!", "troca", "trocar", "outro",
+        "não", "nao", "Não.", "nada", "cancela", "cancelar", "negativo", "para",
+        "espera", "errado", "não pode", "cancela isso", "melhor não", "não sei",
+        "não é isso", "isso não",
+        // The mishearings that made the player repeat "muda".
+        "mula", "muta", "mudaa", "mude", "trocar isso",
+    ]) {
+        assert.equal(value(no), false, `"${no}" deveria cancelar`);
+    }
+
+    for (const neither of [
+        "talvez", "cavalo f3", "cavalo efe três", "torre a1 para a8",
+        "e2 para e4", "peão e4", "roque pequeno", "qual é o placar", ""
+    ]) {
+        assert.equal(value(neither), null, `"${neither}" não é uma resposta`);
+    }
+});
+
+test("a move spoken at the confirmation prompt is never read as a yes", () => {
+    // This is where the removed "primary alternative" test's intent now lives.
+    // "vai", "faz", "joga" and "manda" are affirmatives AND the imperatives that
+    // prefix a move command; only the whole-utterance rule separates them.
     const { FreedomChessApp } = loadInternals();
     const app = Object.create(FreedomChessApp.prototype);
     const alternatives = (...transcripts) => transcripts.map((transcript) => ({ transcript }));
 
-    assert.equal(app.detectConfirmation(alternatives("cem", "sim")), null);
+    for (const move of [
+        "faz torre a1 a8", "joga cavalo f3", "vai torre a1 a8",
+        "manda a dama para h5", "sim cavalo f3", "pode jogar a torre pra a8"
+    ]) {
+        assert.equal(app.confirmationValue({ transcript: move }), null, move);
+    }
+    assert.equal(app.detectConfirmation(alternatives("cavalo f3", "cavalo f3 vai")), null);
+});
+
+test("a yes does not have to be the primary recognition alternative", () => {
+    // This assertion used to be the opposite: detectConfirmation(["cem","sim"])
+    // had to be null. That rule is exactly the reported bug — pt-BR recognition
+    // returns "cem" as the top alternative for a snapped "sim" routinely, and
+    // the player ended up saying "sim" four times.
+    const { FreedomChessApp } = loadInternals();
+    const app = Object.create(FreedomChessApp.prototype);
+    const alternatives = (...transcripts) => transcripts.map((transcript) => ({ transcript }));
+
+    assert.equal(app.detectConfirmation(alternatives("cem", "sim")), true);
+    assert.equal(app.detectConfirmation(alternatives("cem")), true, "the homophone alone still confirms");
     assert.equal(app.detectConfirmation(alternatives("sim", "cem")), true);
-    assert.equal(app.detectConfirmation(alternatives("sim", "não")), null);
+    assert.equal(app.detectConfirmation(alternatives("sim", "não")), null, "the same audio read both ways");
     assert.equal(app.detectConfirmation(alternatives("talvez", "não")), false);
+    assert.equal(app.detectConfirmation([]), null);
 });
 
 test("a transcript that matches nothing reports what was heard and offers the closest move", async () => {
@@ -350,7 +411,9 @@ test("a transcript that matches nothing reports what was heard and offers the cl
     app.assertUsableState = () => undefined;
     app.ui = { announceStatus: (message) => statuses.push(message) };
     app.voice = { speak: async (message) => spoken.push(message) };
+    const executions = [];
     app.confirmAndMakeMove = async (move, generation, options) => confirmations.push({ move, options });
+    app.executeMove = async (move) => executions.push(move);
     app.flushQueuedState = async () => undefined;
 
     await app.handleAlternatives([{ transcript: "Cavalo efe treis", confidence: 0.7 }]);
@@ -362,6 +425,7 @@ test("a transcript that matches nothing reports what was heard and offers the cl
     assert.equal(confirmations.length, 1, "the closest legal move is offered");
     assert.equal(confirmations[0].move, knight);
     assert.equal(confirmations[0].options.approximate, "Cavalo efe treis");
+    assert.equal(executions.length, 0, "an approximate match is never played without confirmation");
     assert.deepEqual(spoken, [], "a suggestion replaces the generic failure sentence");
     assert.equal(app.busy, false);
 });
@@ -391,12 +455,15 @@ test("unrelated speech fails loudly instead of guessing a move", async () => {
     app.assertUsableState = () => undefined;
     app.ui = { announceStatus: (message) => statuses.push(message) };
     app.voice = { speak: async (message) => spoken.push(message) };
+    const executions = [];
     app.confirmAndMakeMove = async (move, generation, options) => confirmations.push({ move, options });
+    app.executeMove = async (move) => executions.push(move);
     app.flushQueuedState = async () => undefined;
 
     await app.handleAlternatives([{ transcript: "qual é o placar do jogo", confidence: 0.9 }]);
 
     assert.equal(confirmations.length, 0, "nothing close enough to suggest");
+    assert.equal(executions.length, 0, "nothing is played on a transcript that matched nothing");
     assert.equal(statuses.length, 1);
     assert.equal(spoken.length, 1);
     assert.match(spoken[0], /qual é o placar do jogo/);
@@ -427,4 +494,267 @@ test("an async command from an old activation cannot speak into a new session", 
     await oldCommand;
 
     assert.deepEqual(spoken, []);
+});
+
+// Shared fixture for the immediate-execution and confirmation-flow tests.
+function makeMoveApp(FreedomChessApp, { legalMoves }) {
+    const app = Object.create(FreedomChessApp.prototype);
+    const spoken = [];
+    const statuses = [];
+    const executions = [];
+    const confirmations = [];
+
+    app.enabled = true;
+    app.busy = false;
+    app.activationGeneration = 1;
+    app.pendingConfirmation = null;
+    app.queuedState = null;
+    app.bridge = {
+        getState: async () => ({ available: true, boardConnected: true, fen: "fen", legalMoves })
+    };
+    app.assertUsableState = () => undefined;
+    app.flushQueuedState = async () => undefined;
+    app.isSessionCurrent = (generation) => app.enabled && generation === app.activationGeneration;
+    app.ui = {
+        announceStatus: (message) => statuses.push(message),
+        showConfirmation: () => { throw new Error("showConfirmation deve estar mudo no caminho imediato"); },
+    };
+    app.voice = { speak: async (message) => spoken.push(message) };
+    app.executeMove = async (move) => executions.push(move);
+    app.confirmAndMakeMove = async (move, generation, options) => confirmations.push({ move, options });
+
+    return { app, spoken, statuses, executions, confirmations };
+}
+
+test("a high-confidence top match is played without confirmation", async () => {
+    // The "convicção alta" fast path: a confident, unambiguous top guess plays
+    // at once. Default threshold is 0.9.
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
+    const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: [knight] });
+
+    await app.handleAlternatives([{ transcript: "cavalo f3", confidence: 0.98 }]);
+
+    assert.equal(executions.length, 1, "a confident move is played straight away");
+    assert.equal(executions[0], knight);
+    assert.equal(confirmations.length, 0, "no confirmation when conviction is high");
+    assert.equal(app.busy, false);
+});
+
+test("a low-confidence match is confirmed, not auto-played", async () => {
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
+    const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: [knight] });
+
+    await app.handleAlternatives([{ transcript: "cavalo f3", confidence: 0.4 }]);
+
+    assert.equal(confirmations.length, 1, "an unsure move waits for a spoken yes");
+    assert.equal(confirmations[0].move, knight);
+    assert.equal(executions.length, 0, "nothing reaches the board before a yes");
+});
+
+test("a match with no confidence score is confirmed", async () => {
+    // The regression guard for the wrong-move bug: when the recognizer reports
+    // no confidence, the move is never auto-played.
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
+    const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: [knight] });
+
+    await app.handleAlternatives([{ transcript: "cavalo f3", confidence: null }]);
+
+    assert.equal(confirmations.length, 1, "no confidence means confirm");
+    assert.equal(executions.length, 0);
+});
+
+test("a confident move that is only a secondary alternative is confirmed", async () => {
+    // The confident TOP guess is something illegal/unmatched; the actual move
+    // only surfaced in a lower alternative, so it must not auto-play.
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
+    const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: [knight] });
+
+    await app.handleAlternatives([
+        { transcript: "qual é o placar", confidence: 0.98 },
+        { transcript: "cavalo f3", confidence: 0.98 },
+    ]);
+
+    assert.equal(confirmations.length, 1, "only the top alternative earns the fast path");
+    assert.equal(confirmations[0].move, knight);
+    assert.equal(executions.length, 0);
+});
+
+test("a promotion whose piece was not named asks for the piece, not the origin square", async () => {
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const promotions = ["q", "r", "b", "n"].map((promotion) => ({
+        from: "e7", to: "e8", piece: "p", flags: "np", promotion, san: `e8=${promotion.toUpperCase()}`
+    }));
+    const { app, spoken, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: promotions });
+
+    await app.handleAlternatives([{ transcript: "peão é oito", confidence: 0.9 }]);
+
+    assert.equal(executions.length, 0, "an unnamed promotion is never auto-played");
+    assert.equal(confirmations.length, 0);
+    assert.equal(spoken.length, 1);
+    assert.match(spoken[0], /peça da promoção/);
+    assert.doesNotMatch(spoken[0], /casa de origem/);
+});
+
+test("a fully named promotion is resolved to the right piece and played when confident", async () => {
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const promotions = ["q", "r", "b", "n"].map((promotion) => ({
+        from: "e7", to: "e8", piece: "p", flags: "np", promotion, san: `e8=${promotion.toUpperCase()}`
+    }));
+    const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: promotions });
+
+    await app.handleAlternatives([{ transcript: "peão é oito dama", confidence: 0.98 }]);
+
+    assert.equal(executions.length, 1, "a confident, fully named promotion plays");
+    assert.equal(realCore.movePromotion(executions[0]), "q");
+    assert.equal(confirmations.length, 0);
+});
+
+test("a fully named promotion at low confidence is confirmed", async () => {
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const promotions = ["q", "r", "b", "n"].map((promotion) => ({
+        from: "e7", to: "e8", piece: "p", flags: "np", promotion, san: `e8=${promotion.toUpperCase()}`
+    }));
+    const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: promotions });
+
+    await app.handleAlternatives([{ transcript: "peão é oito dama", confidence: 0.5 }]);
+
+    assert.equal(confirmations.length, 1, "an unsure promotion still gets confirmed");
+    assert.equal(realCore.movePromotion(confirmations[0].move), "q");
+    assert.equal(executions.length, 0);
+});
+
+test("move confirmation is voice-only: no dialog, 'muda' rejects, 'confirma' plays", async () => {
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const app = Object.create(FreedomChessApp.prototype);
+    const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
+    const executions = [];
+    let dialogOpened = false;
+
+    app.enabled = true;
+    app.activationGeneration = 1;
+    app.pendingConfirmation = null;
+    app.voiceState = "";
+    app.isSessionCurrent = (generation) => app.enabled && generation === app.activationGeneration;
+    app.ui = {
+        setState: () => undefined,
+        announceStatus: () => undefined,
+        showConfirmation: () => { dialogOpened = true; throw new Error("a confirmação não pode abrir diálogo sobre o tabuleiro"); },
+    };
+    app.voice = {
+        speak: async () => undefined,
+        startListening: () => undefined,
+        stopRecognition: () => undefined,
+    };
+    app.executeMove = async (move) => executions.push(move);
+
+    // "muda" rejects and nothing is played.
+    const rejected = app.confirmAndMakeMove(knight, 1);
+    await tick();
+    assert.ok(app.pendingConfirmation, "the move waits for a spoken answer");
+    assert.equal(dialogOpened, false, "no panel is drawn in front of the board");
+    await app.handleAlternatives([{ transcript: "muda" }]);
+    await rejected;
+    assert.equal(executions.length, 0, "'muda' does not play the move");
+
+    // "confirma" plays it.
+    const confirmed = app.confirmAndMakeMove(knight, 1);
+    await tick();
+    await app.handleAlternatives([{ transcript: "confirma" }]);
+    await confirmed;
+    assert.equal(executions.length, 1, "'confirma' plays the move");
+    assert.equal(executions[0], knight);
+    assert.equal(dialogOpened, false, "still no dialog anywhere in the flow");
+});
+
+test("a second transcript cannot start a second move while one is executing", async () => {
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
+    const { app, statuses, executions } = makeMoveApp(FreedomChessApp, { legalMoves: [knight] });
+    app.busy = true;
+
+    await app.handleAlternatives([{ transcript: "cavalo f3", confidence: 0.9 }]);
+
+    assert.equal(executions.length, 0, "the move in flight is not disturbed");
+    assert.equal(statuses.length, 1, "the collision is reported");
+    assert.equal(app.busy, true, "the guard must not clear another path's flag");
+});
+
+test("a move the board never confirms is reported by name", async () => {
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
+    const spoken = [];
+    const app = Object.create(FreedomChessApp.prototype);
+
+    app.enabled = true;
+    app.activationGeneration = 1;
+    app.isSessionCurrent = (generation) => app.enabled && generation === app.activationGeneration;
+    app.assertUsableState = () => undefined;
+    app.bridge = {
+        getState: async () => ({ available: true, boardConnected: true, fen: "fen", legalMoves: [knight] })
+    };
+    app.ui = { announceStatus: () => undefined };
+    app.voice = { speak: async (message) => spoken.push(message) };
+    app.performPointerMove = () => undefined;
+    app.waitForMove = async () => null;
+    app.updatePhraseHints = () => undefined;
+
+    await app.executeMove(knight, 1);
+
+    assert.equal(spoken.length, 1);
+    assert.match(spoken[0], /Não consegui completar/);
+    assert.match(spoken[0], /[Cc]avalo/);
+});
+
+test("three unreadable answers cancel instead of re-prompting forever", async () => {
+    const { FreedomChessApp } = loadInternals();
+    const app = Object.create(FreedomChessApp.prototype);
+    const spoken = [];
+    let decided = "untouched";
+
+    app.enabled = true;
+    app.activationGeneration = 1;
+    app.pendingConfirmation = { misses: 0, finish: (value) => { decided = value; } };
+    app.voice = { speak: async (message) => spoken.push(message) };
+
+    await app.handleAlternatives([{ transcript: "hum" }]);
+    await app.handleAlternatives([{ transcript: "hum" }]);
+    assert.equal(decided, "untouched", "still waiting after two unreadable answers");
+    assert.deepEqual(spoken, ["Diga confirma ou muda.", "Diga confirma ou muda."]);
+
+    await app.handleAlternatives([{ transcript: "hum" }]);
+    assert.equal(decided, false, "the third unreadable answer cancels");
+    assert.equal(spoken.length, 2, "cancelling does not add another prompt");
+});
+
+test("a browser without on-device recognition fails clearly and never goes online", async () => {
+    const { FreedomChessApp } = loadInternals();
+    const app = Object.create(FreedomChessApp.prototype);
+    app.ui = { showConfirmation: () => { throw new Error("uma ativação sem pacote local não deve perguntar nada"); } };
+
+    // The default RecognitionMock exposes no available/install and no
+    // processLocally, so supportsLocal is false — a browser with no on-device
+    // pt-BR. With online recognition removed, that is a hard, actionable stop,
+    // not a silent switch to the cloud.
+    await assert.rejects(
+        () => app.prepareRecognitionMode(),
+        (error) => {
+            assert.doesNotMatch(error.message, /online/i, "the message never offers an online mode");
+            assert.match(error.message, /dispositivo/i);
+            return true;
+        },
+    );
 });

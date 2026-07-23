@@ -82,7 +82,7 @@ function createGame() {
                 from: "g1",
                 to: "f3",
                 piece: "n",
-                flags: 1,
+                flags: 0,
                 san: "Nf3",
                 internalHelper() {
                     return "must not cross the bridge";
@@ -96,7 +96,7 @@ function createGame() {
             from: "e7",
             to: "e5",
             piece: "p",
-            flags: 4,
+            flags: 2,
             ply: 2,
             wholeMoveNumber: 1,
             color: 2,
@@ -362,7 +362,7 @@ test("returns a complete, serializable game state and echoes request correlation
         from: "g1",
         to: "f3",
         piece: "n",
-        flags: 1,
+        flags: 0,
         san: "Nf3"
     }]);
     assert.equal(response.state.lastMove.san, "e5");

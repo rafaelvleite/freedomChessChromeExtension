@@ -16,6 +16,7 @@ test("exports the same pure API in CommonJS and a browser global", () => {
     assert.deepEqual(Object.keys(core).sort(), [
         "formatSquare",
         "matchMoveIntent",
+        "movePromotion",
         "normalizeSpeech",
         "parseMoveIntent",
         "rankMovesBySpeech",
@@ -49,6 +50,64 @@ test("normalizes destination squares, accents, spoken letters and ranks", () => 
             promotion: null
         });
     }
+});
+
+test("accepts robust spoken file names when the recognizer drops the vowel letter", () => {
+    // A degraded recognizer returns "e4" as just "quatro" (the file letter is
+    // clipped). Multi-syllable file names survive; the e-file gets the priority
+    // set, including forms left when the mic clips their start.
+    for (const speech of ["estrela quatro", "elefante quatro", "strela quatro", "peão estrela quatro"]) {
+        assert.equal(core.parseMoveIntent(speech).toSquare, "e4", speech);
+    }
+    assert.equal(core.parseMoveIntent("ana quatro").toSquare, "a4");
+    assert.equal(core.parseMoveIntent("gato três").toSquare, "g3");
+    assert.equal(core.parseMoveIntent("hotel um").toSquare, "h1");
+    const rook = core.parseMoveIntent("torre ana um");
+    assert.equal(rook.piece, "r");
+    assert.equal(rook.toSquare, "a1");
+
+    // A file name outside a move stays harmless: no rank, no match.
+    assert.equal(core.parseMoveIntent("estrela").reason, "invalid-move-syntax");
+    // Normal moves are untouched by the alias step.
+    assert.equal(core.parseMoveIntent("e4").toSquare, "e4");
+    assert.equal(core.parseMoveIntent("cavalo f3").toSquare, "f3");
+});
+
+test("origin+destination coordinates identify the piece without naming it", () => {
+    const legal = [
+        move("e2", "e4", "p", { flags: 2, san: "e4" }),
+        move("f2", "f3", "p", { flags: 0, san: "f3" }),
+        move("g1", "f3", "n", { flags: 0, san: "Nf3" }),
+        move("b1", "c3", "n", { flags: 0, san: "Nc3" })
+    ];
+    const played = (speech) => {
+        const result = core.matchMoveIntent(core.parseMoveIntent(speech), legal);
+        return result.status === "matched" ? result.move.from + result.move.to : result.status;
+    };
+
+    // A named origin square needs no piece word: it is whatever stands there.
+    assert.equal(played("g1 f3"), "g1f3", "coordinate move finds the knight, not a pawn");
+    assert.equal(played("e2 e4"), "e2e4");
+    assert.equal(played("b1 c3"), "b1c3");
+
+    // The mic clips the leading origin file; the surviving rank still recovers it.
+    assert.equal(played("1 f3"), "g1f3", "origin rank alone recovers the knight");
+    assert.equal(played("2 e4"), "e2e4");
+
+    // A bare origin FILE with no rank is still SAN pawn notation, not coordinate.
+    assert.equal(core.parseMoveIntent("c por dê quatro").piece, "p");
+    // No origin at all defaults to a pawn.
+    assert.equal(core.parseMoveIntent("e4").piece, "p");
+    // A coordinate move carries no assumed piece.
+    assert.equal(core.parseMoveIntent("g1 f3").piece, null);
+
+    // A coordinate promotion still refuses to guess the piece, then accepts it.
+    const promotions = ["q", "r", "b", "n"].map((promotion) =>
+        move("e7", "e8", "p", { flags: "np", promotion, san: `e8=${promotion.toUpperCase()}` }));
+    assert.equal(core.matchMoveIntent(core.parseMoveIntent("e7 e8"), promotions).status, "ambiguous");
+    const named = core.matchMoveIntent(core.parseMoveIntent("e7 e8 dama"), promotions);
+    assert.equal(named.status, "matched");
+    assert.equal(named.move.promotion, "q");
 });
 
 test("parses every Portuguese piece name without semantic fuzziness", () => {
@@ -188,6 +247,33 @@ test("keeps kingside and queenside castling strictly separate", () => {
         core.matchMoveIntent(core.parseMoveIntent("grande roque"), [shortCastle]),
         { status: "no-match", reason: "castle-not-legal" }
     );
+
+    // A pt-BR recognizer in a degraded mode returns the English "rock" for
+    // "roque". Every homophone must still castle, kingside by default.
+    for (const speech of ["rock", "rocky", "rogue", "hoque", "rock curto"]) {
+        const intent = core.parseMoveIntent(speech);
+        assert.equal(intent.castle, "king", speech);
+        assert.equal(core.matchMoveIntent(intent, legalMoves).move, shortCastle, speech);
+    }
+    for (const speech of ["grande rock", "rock grande", "rock longo"]) {
+        const intent = core.parseMoveIntent(speech);
+        assert.equal(intent.castle, "queen", speech);
+        assert.equal(core.matchMoveIntent(intent, legalMoves).move, longCastle, speech);
+    }
+
+    // The king only ever travels two files by castling, so a bare coordinate
+    // move off its home square is a castle even with no piece word.
+    for (const speech of ["e1 g1", "e um g um", "rei e1 g1"]) {
+        const intent = core.parseMoveIntent(speech);
+        assert.equal(intent.castle, "king", speech);
+        assert.equal(core.matchMoveIntent(intent, legalMoves).move, shortCastle, speech);
+    }
+    assert.equal(core.parseMoveIntent("e1 c1").castle, "queen");
+    assert.equal(core.parseMoveIntent("e8 g8").castle, "king");
+
+    // A normal one- or two-square move must NOT be mistaken for a castle.
+    assert.equal(core.parseMoveIntent("e2 e4").castle, null);
+    assert.equal(core.parseMoveIntent("e1 e2").castle, null);
 });
 
 test("requires and exactly matches the requested promotion piece", () => {
@@ -202,6 +288,17 @@ test("requires and exactly matches the requested promotion piece", () => {
     const missingPiece = core.matchMoveIntent(core.parseMoveIntent("é oito"), promotions);
     assert.equal(missingPiece.status, "ambiguous");
     assert.equal(missingPiece.candidates.length, 4);
+
+    // Load-bearing string: the single-candidate promotion guard. Renaming it
+    // must fail here, not silently downgrade a promotion to a queen.
+    assert.deepEqual(
+        core.matchMoveIntent(core.parseMoveIntent("é oito"), [promotions[0]]),
+        { status: "no-match", reason: "promotion-required" }
+    );
+    // SAN is the only promotion evidence Chess.com sometimes sends.
+    assert.equal(core.movePromotion({ from: "e7", to: "e8", san: "e8=N" }), "n");
+    assert.equal(core.movePromotion({ from: "e7", to: "e8", promotion: "Q" }), "q");
+    assert.equal(core.movePromotion({ from: "g1", to: "f3", san: "Nf3" }), null);
 
     for (const [speech, promotion] of [
         ["é oito promoção dama", "q"],
@@ -254,6 +351,24 @@ test("verbalizes squares and verbose moves in Brazilian Portuguese", () => {
         core.verbalizeMove(move("e1", "c1", "k", { flags: "q", san: "O-O-O" })),
         "Roque longo"
     );
+
+    // The screen gets real algebraic squares; the synthesizer keeps the
+    // spelled-out letter names it needs to pronounce them correctly.
+    assert.equal(core.formatSquare("a1", { plain: true }), "a1");
+    assert.equal(core.formatSquare("H8", { plain: true }), "h8");
+    assert.equal(core.formatSquare("z9", { plain: true }), "");
+    assert.equal(
+        core.verbalizeMove(move("g1", "f3", "n", { san: "Nf3" }), { plain: true }),
+        "Cavalo de g1 para f3"
+    );
+    assert.equal(
+        core.verbalizeMove(move("c4", "f7", "b", { flags: "c", captured: "p", san: "Bxf7+" }), { plain: true }),
+        "Bispo de c4 captura f7, xeque"
+    );
+    assert.equal(
+        core.verbalizeMove(move("e1", "c1", "k", { flags: "q", san: "O-O-O" }), { plain: true }),
+        "Roque longo"
+    );
 });
 
 test("understands the capitalized transcripts Chrome actually produces", () => {
@@ -263,7 +378,7 @@ test("understands the capitalized transcripts Chrome actually produces", () => {
     const legalMoves = [
         move("e1", "f1", "k", { san: "Kf1" }),
         move("d1", "h5", "q", { san: "Qh5" }),
-        move("e2", "e4", "p", { flags: 4, san: "e4" }),
+        move("e2", "e4", "p", { flags: 2, san: "e4" }),
         move("f1", "b5", "b", { san: "Bb5" }),
         move("a3", "b4", "p", { san: "b4" }),
         move("g1", "f3", "n", { san: "Nf3" })
@@ -294,31 +409,52 @@ test("understands the capitalized transcripts Chrome actually produces", () => {
     }
 });
 
-test("reads the numeric move flags Chess.com sends, not only chess.js letters", () => {
-    assert.equal(core.verbalizeMove({ from: "e1", to: "g1", piece: "k", flags: 32 }), "Roque curto");
-    assert.equal(core.verbalizeMove({ from: "e1", to: "c1", piece: "k", flags: 64 }), "Roque longo");
+test("reads the numeric move flags Chess.com sends, not chess.js's", () => {
+    // Chess.com's own enum, verified in its live client bundles:
+    // CAPTURE 1, BIG_PAWN 2, EP_CAPTURE 4, PROMOTION 8, KSIDE 16, QSIDE 32, DROP 64.
+    assert.equal(core.verbalizeMove({ from: "e1", to: "g1", piece: "k", flags: 16 }), "Roque curto");
+    assert.equal(core.verbalizeMove({ from: "e1", to: "c1", piece: "k", flags: 32 }), "Roque longo");
 
     // Capture detection used to depend entirely on `san` containing an "x".
     assert.equal(
-        core.verbalizeMove({ from: "f3", to: "e5", piece: "n", flags: 2 }),
+        core.verbalizeMove({ from: "f3", to: "e5", piece: "n", flags: 1 }),
         "Cavalo de efe três captura é cinco"
     );
     assert.equal(
-        core.verbalizeMove({ from: "d5", to: "e6", piece: "p", flags: 8 }),
+        core.verbalizeMove({ from: "d5", to: "e6", piece: "p", flags: 4 }),
         "Peão de dê cinco captura é seis"
     );
 
-    const numericCapture = { from: "f3", to: "e5", piece: "n", flags: 2 };
+    // The reported bug: a double pawn push carries BIG_PAWN, not CAPTURE.
+    assert.equal(
+        core.verbalizeMove({ color: 2, from: "e7", to: "e5", piece: "p", flags: 2, san: "e5" }),
+        "Peão de é sete para é cinco"
+    );
+    // A quiet promotion carries PROMOTION, which is not a capture either.
+    assert.equal(
+        core.verbalizeMove({ from: "e7", to: "e8", piece: "p", flags: 8, promotion: "q", san: "e8=Q" }),
+        "Peão de é sete para é oito, promovendo a dama"
+    );
+
+    const numericCapture = { from: "f3", to: "e5", piece: "n", flags: 1 };
     const result = core.matchMoveIntent(core.parseMoveIntent("cavalo captura é cinco"), [numericCapture]);
     assert.equal(result.status, "matched");
 
     // A quiet numeric move must not be mistaken for a capture.
     assert.equal(
         core.matchMoveIntent(core.parseMoveIntent("cavalo captura é cinco"), [
-            { from: "f3", to: "e5", piece: "n", flags: 1 }
+            { from: "f3", to: "e5", piece: "n", flags: 0 }
         ]).status,
         "no-match"
     );
+
+    // A queenside castle must never be announced or matched as a short castle.
+    const castles = [
+        { from: "e1", to: "g1", piece: "k", flags: 16, san: "O-O" },
+        { from: "e1", to: "c1", piece: "k", flags: 32, san: "O-O-O" }
+    ];
+    assert.equal(core.matchMoveIntent(core.parseMoveIntent("roque longo"), castles).move, castles[1]);
+    assert.equal(core.matchMoveIntent(core.parseMoveIntent("roque curto"), castles).move, castles[0]);
 });
 
 test("treats x as a capture marker only when it stands alone", () => {
@@ -331,7 +467,7 @@ test("treats x as a capture marker only when it stands alone", () => {
 test("suggests the closest legal move for a garbled transcript, never silently", () => {
     const knight = move("g1", "f3", "n", { san: "Nf3" });
     const bishop = move("f1", "c4", "b", { san: "Bc4" });
-    const castle = move("e1", "g1", "k", { flags: 32, san: "O-O" });
+    const castle = move("e1", "g1", "k", { flags: 16, san: "O-O" });
     const legalMoves = [knight, bishop, castle];
 
     for (const [speech, expected] of [
@@ -357,24 +493,28 @@ test("hints the recognizer with phrases a player says, not synthesizer output", 
         "cavalo f3",
         "cavalo efe três",
         "cavalo de g1 para f3",
-        "cavalo de gê um para efe três"
+        "cavalo de gê um para efe três",
+        "g1 f3",
+        "gê um efe três"
     ]);
 
     // Pawns are named by their square alone, the way players speak.
-    assert.deepEqual(core.spokenMoveVariants(move("e2", "e4", "p", { flags: 4, san: "e4" })), [
+    assert.deepEqual(core.spokenMoveVariants(move("e2", "e4", "p", { flags: 2, san: "e4" })), [
         "e4",
         "é quatro",
         "de e2 para e4",
-        "de é dois para é quatro"
+        "de é dois para é quatro",
+        "e2 e4",
+        "é dois é quatro"
     ]);
 
     assert.deepEqual(
-        core.spokenMoveVariants(move("e1", "c1", "k", { flags: 64, san: "O-O-O" })),
+        core.spokenMoveVariants(move("e1", "c1", "k", { flags: 32, san: "O-O-O" })),
         ["roque longo", "roque grande"]
     );
 
     assert.ok(
-        core.spokenMoveVariants(move("f3", "e5", "n", { flags: 2, san: "Nxe5" }))
+        core.spokenMoveVariants(move("f3", "e5", "n", { flags: 1, san: "Nxe5" }))
             .includes("cavalo captura e5")
     );
     assert.deepEqual(core.spokenMoveVariants(null), []);

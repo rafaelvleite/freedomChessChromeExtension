@@ -61,17 +61,70 @@
         h: "h"
     };
 
+    // Robust spoken names for the files. The single-vowel letter names ("é" for
+    // e, "á" for a) are so short that a degraded recognizer drops or confuses
+    // them ("e4" came back as just "quatro", or as "a4"). These multi-syllable
+    // words survive, and each was checked not to collide with any piece / number
+    // / castle / request / syntax word the parser already handles. "e" gets
+    // estrela/elefante rather than "eva" because a word that also LEADS with the
+    // weak vowel reproduces the very bug. Said before a rank, e.g. "estrela
+    // quatro" -> e4; the letter it maps to then flows through the normal rules.
+    var FILE_ALIAS_TO_FILE = {
+        ana: "a", alfa: "a", amor: "a",
+        bravo: "b", bruno: "b", bandeira: "b",
+        carlos: "c", cadeira: "c",
+        daniel: "d", dado: "d",
+        estrela: "e", elefante: "e",
+        // Forms left when the mic clips the start of the e-file words.
+        strela: "e", trela: "e", lefante: "e", elefant: "e",
+        ferro: "f", felipe: "f",
+        gato: "g", gustavo: "g",
+        hotel: "h", hugo: "h", harpa: "h"
+    };
+
+    var FILE_ALIAS_PATTERN = new RegExp(
+        "\\b(" + Object.keys(FILE_ALIAS_TO_FILE).join("|") + ")\\b",
+        "g"
+    );
+
     var PROMOTION_PIECES = { Q: "q", R: "r", B: "b", N: "n" };
 
-    // Chess.com forwards chess.js move flags as a numeric bitmask, while chess.js
-    // itself uses the letter form. Both have to be understood.
-    var FLAG_BITS = {
-        capture: 2,
-        epCapture: 8,
-        promotion: 16,
-        kingsideCastle: 32,
-        queensideCastle: 64
+    // A king only ever travels two files by castling, so a coordinate move off
+    // its home square to g/c is unambiguously a castle. Lets "e1 g1" cast when
+    // the recognizer mangles the word "roque" beyond repair.
+    var CASTLE_BY_KING_TRAVEL = {
+        e1g1: "king", e8g8: "king",
+        e1c1: "queen", e8c8: "queen"
     };
+
+    // Chess.com's board engine ships its OWN numeric bitmask, and it is NOT
+    // chess.js's. Verified verbatim in two independent live client bundles:
+    //   {CAPTURE:1,BIG_PAWN:2,EP_CAPTURE:4,ANY_CAPTURE:5,PROMOTION:8,
+    //    KSIDE_CASTLE:16,QSIDE_CASTLE:32,KQSIDE_CASTLE:48,DROP:64}
+    // Reading those numbers as chess.js BITS made every double pawn push
+    // (BIG_PAWN 2 vs CAPTURE 2) announce "captura" and every long castle
+    // (QSIDE 32 vs KSIDE 32) announce "Roque curto".
+    // chess.js's public API never emits numbers at all — make_pretty converts
+    // BITS to the letter form — so a numeric `flags` can only come from
+    // Chess.com. They are nevertheless consulted LAST: every decision below
+    // prefers evidence that does not depend on a vendor encoding.
+    var FLAG_BITS = {
+        capture: 1,
+        bigPawn: 2,
+        epCapture: 4,
+        promotion: 8,
+        kingsideCastle: 16,
+        queensideCastle: 32,
+        drop: 64
+    };
+
+    var SQUARE_PATTERN = /^[a-h][1-8]$/;
+
+    // The alphabet chess.js builds its letter flags from. Any other string is
+    // an unknown vocabulary and must not be mined for stray characters.
+    var LETTER_FLAG_PATTERN = /^[nbcepkq]+$/;
+
+    var SAN_PATTERN = /^(?:O-O(?:-O)?|[KQRBN]?[a-h]?[1-8]?x?[a-h][1-8](?:=[QRBN])?)[+#]?$/;
 
     function numericFlags(move) {
         var flags = move && move.flags;
@@ -80,6 +133,12 @@
 
     function letterFlags(move) {
         return move && typeof move.flags === "string" ? move.flags : "";
+    }
+
+    // Only a well-formed SAN is trustworthy enough to overrule a flag.
+    function canonicalSan(move) {
+        var san = String(move && move.san || "").replace(/0/g, "O");
+        return SAN_PATTERN.test(san) ? san : "";
     }
 
     function replaceWords(value, words, replacement) {
@@ -129,6 +188,22 @@
         // piece name the recognizer produces ("Rei", "Rainha", "Pe\u00e3o").
         value = protectWrittenPieceSymbols(value);
         value = value.toLowerCase();
+
+        // A pt-BR recognizer running in a degraded/foreign mode transcribes
+        // "roque" (/ˈʁɔ.ki/) as the English "rock" and its neighbours. Folding
+        // them back to "roque" lets the castling logic below do its job. "rook"
+        // is deliberately absent: that is the English word for a rook (torre).
+        value = value.replace(/\b(?:rock|rocky|rockie|roque|roqui|roquy|rok|roc|hoque|hoqui|hock|rogue)\b/g, "roque");
+
+        // Robust file names -> the file letter, before the piece / number /
+        // castle rules run. None of the aliases is a castle word, so order with
+        // the block below does not matter; doing it early just keeps the letter
+        // available for the "<file><rank>" rule. A bare letter with no rank
+        // simply fails to match later, so an alias in non-move speech degrades
+        // to no-match, never a wrong move.
+        value = value.replace(FILE_ALIAS_PATTERN, function (_, alias) {
+            return " " + FILE_ALIAS_TO_FILE[alias] + " ";
+        });
 
         // Protect castling before punctuation and hyphens are discarded.
         value = value
@@ -267,15 +342,24 @@
             return setIntentError(intent, "invalid-move-syntax");
         }
 
-        var movingPiece = pieceFromToken(match[1]) || "p";
+        var explicitPiece = pieceFromToken(match[1]);
+        var originFile = match[2] || null;
+        var originRank = match[3] || null;
+        // An origin RANK identifies the piece by whatever stands on that square,
+        // so no piece word is needed: "g1 f3" is the knight, not a (non-existent)
+        // pawn, and it still works as "1 f3" when the mic clips the origin file.
+        // A bare origin FILE with no rank stays a PAWN — that is SAN pawn-capture
+        // notation ("cxd4" is a c-file pawn), not a coordinate. No origin at all
+        // is also a pawn, the SAN convention for "e4".
+        var movingPiece = explicitPiece || (originRank ? null : "p");
         var inlinePromotion = promotionFromToken(match[6]);
         if (inlinePromotion && extractedPromotion && inlinePromotion !== extractedPromotion) {
             return setIntentError(intent, "conflicting-promotion");
         }
 
         intent.piece = movingPiece;
-        intent.originFile = match[2] || null;
-        intent.originRank = match[3] || null;
+        intent.originFile = originFile;
+        intent.originRank = originRank;
         intent.fromSquare = intent.originFile && intent.originRank
             ? intent.originFile + intent.originRank
             : null;
@@ -283,7 +367,10 @@
         intent.capture = Boolean(match[4]);
         intent.promotion = inlinePromotion || extractedPromotion || null;
 
-        if (intent.promotion && intent.piece !== "p") {
+        // Only reject a promotion when a NON-pawn piece was explicitly named; an
+        // unconstrained coordinate move ("e7 e8 dama") is fine because the legal
+        // move list still requires a pawn there.
+        if (intent.promotion && intent.piece && intent.piece !== "p") {
             return setIntentError(intent, "only-pawns-promote");
         }
         if (intent.fromSquare && intent.fromSquare === intent.toSquare) {
@@ -374,31 +461,65 @@
             return setIntentError(intent, "missing-destination");
         }
 
-        return parseCompactMove(tokens.join(""), intent, extractedPromotion);
+        var parsed = parseCompactMove(tokens.join(""), intent, extractedPromotion);
+
+        // A fully-specified coordinate move off a king's home square, two files
+        // sideways, is a castle whatever piece word (if any) was spoken -- a
+        // king only travels two files by castling. This is what lets "e1 g1"
+        // or "rei e1 g1" work when the recognizer garbles "roque". A coordinate
+        // move parses with a null piece now, so that counts too; only an
+        // explicit NON-king piece is excluded.
+        if (!parsed.reason && !parsed.castle && parsed.fromSquare
+                && parsed.piece !== "n" && parsed.piece !== "b"
+                && parsed.piece !== "r" && parsed.piece !== "q") {
+            var side = CASTLE_BY_KING_TRAVEL[parsed.fromSquare + parsed.toSquare];
+            if (side) {
+                parsed.castle = side;
+                parsed.piece = "k";
+                parsed.capture = false;
+                parsed.promotion = null;
+            }
+        }
+
+        return parsed;
     }
 
+    /**
+     * Encoding-independent evidence first: SAN, then chess.js letter flags,
+     * then king geometry. The numeric bitmask is consulted only when nothing
+     * else can answer, because a stray bit here does not merely mislabel a
+     * move -- matchMoveIntent drops every castle-flagged move from the normal
+     * candidate list, making it unplayable by voice.
+     */
     function moveCastleSide(move) {
         if (!move || typeof move !== "object") { return null; }
 
-        var bits = numericFlags(move);
-        if (bits & FLAG_BITS.queensideCastle) { return "queen"; }
-        if (bits & FLAG_BITS.kingsideCastle) { return "king"; }
-
-        var flags = letterFlags(move);
-        if (flags.indexOf("q") !== -1) { return "queen"; }
-        if (flags.indexOf("k") !== -1) { return "king"; }
-
-        var san = String(move.san || "").replace(/[+#]+$/g, "").replace(/0/g, "O");
+        var san = canonicalSan(move).replace(/[+#]+$/g, "");
         if (san === "O-O-O") { return "queen"; }
         if (san === "O-O") { return "king"; }
 
         var from = String(move.from || "").toLowerCase();
         var to = String(move.to || "").toLowerCase();
         var piece = String(move.piece || "").toLowerCase();
+
+        // A move that names a non-king piece, or that already produced a
+        // well-formed non-castling SAN, is definitively not a castle.
+        if ((piece && piece !== "k") || san) { return null; }
+
+        var flags = letterFlags(move);
+        if (LETTER_FLAG_PATTERN.test(flags)) {
+            if (flags.indexOf("q") !== -1) { return "queen"; }
+            if (flags.indexOf("k") !== -1) { return "king"; }
+        }
+
         if (piece === "k" && (from === "e1" || from === "e8")) {
             if (to === "c1" || to === "c8") { return "queen"; }
             if (to === "g1" || to === "g8") { return "king"; }
         }
+
+        var bits = numericFlags(move);
+        if (bits & FLAG_BITS.queensideCastle) { return "queen"; }
+        if (bits & FLAG_BITS.kingsideCastle) { return "king"; }
         return null;
     }
 
@@ -411,11 +532,40 @@
         return match ? match[1].toLowerCase() : null;
     }
 
+    /**
+     * Ordered ladder: the first trustworthy signal answers, in BOTH directions.
+     * The previous version was four OR-ed positive tests over a guessed
+     * bitmask, so a correct `san` could never overrule a misread flag.
+     */
     function isCapture(move) {
-        if (!move) { return false; }
-        if (move.captured) { return true; }
-        if (numericFlags(move) & (FLAG_BITS.capture | FLAG_BITS.epCapture)) { return true; }
-        return /[ce]/.test(letterFlags(move)) || String(move.san || "").indexOf("x") !== -1;
+        if (!move || typeof move !== "object") { return false; }
+
+        var piece = String(move.piece || "").toLowerCase();
+        var from = String(move.from || "").toLowerCase();
+        var to = String(move.to || "").toLowerCase();
+
+        // A rule of chess, so it outranks every vendor-supplied field: a pawn
+        // changes file if and only if it captures (en passant included).
+        if (piece === "p" && SQUARE_PATTERN.test(from) && SQUARE_PATTERN.test(to)) {
+            return from.charAt(0) !== to.charAt(0);
+        }
+
+        // A captured piece identifier is direct positive evidence. Only a
+        // truthy primitive counts: an object survives the bridge clone as a
+        // truthy `{}` and would fabricate captures.
+        var captured = move.captured;
+        if (typeof captured === "string" ? captured !== "" : typeof captured === "number" && captured !== 0) {
+            return true;
+        }
+
+        // Well-formed SAN is decisive both ways: "x" appears in no other token.
+        var san = canonicalSan(move);
+        if (san) { return san.indexOf("x") !== -1; }
+
+        var flags = letterFlags(move);
+        if (LETTER_FLAG_PATTERN.test(flags)) { return /[ce]/.test(flags); }
+
+        return (numericFlags(move) & (FLAG_BITS.capture | FLAG_BITS.epCapture)) !== 0;
     }
 
     /**
@@ -436,13 +586,15 @@
                 return moveCastleSide(move) === intent.castle;
             });
         } else {
-            if (!intent.toSquare || !intent.piece) {
+            if (!intent.toSquare) {
                 return { status: "no-match", reason: "invalid-intent" };
             }
 
             candidates = moves.filter(function (move) {
                 if (!move || moveCastleSide(move)) { return false; }
-                if (String(move.piece || "").toLowerCase() !== intent.piece) { return false; }
+                // A null piece is an unconstrained coordinate move: the origin
+                // square (or rank) below is what identifies the piece.
+                if (intent.piece && String(move.piece || "").toLowerCase() !== intent.piece) { return false; }
                 if (String(move.to || "").toLowerCase() !== intent.toSquare) { return false; }
 
                 var from = String(move.from || "").toLowerCase();
@@ -480,10 +632,19 @@
         return { status: "ambiguous", candidates: candidates };
     }
 
-    function formatSquare(square) {
+    /**
+     * Default output is the spelled-out pronunciation ("é sete"), which is what
+     * the synthesizer and the recognizer hints need. `{ plain: true }` returns
+     * the algebraic form ("e7") for anything a human reads on screen -- the
+     * letter names are pronunciation aids, not Portuguese.
+     */
+    function formatSquare(square, options) {
         var normalized = String(square || "").toLowerCase();
-        if (!/^[a-h][1-8]$/.test(normalized)) {
+        if (!SQUARE_PATTERN.test(normalized)) {
             return "";
+        }
+        if (options && options.plain) {
+            return normalized;
         }
         return FILE_WORDS[normalized.charAt(0)] + " " + RANK_WORDS[normalized.charAt(1)];
     }
@@ -495,7 +656,7 @@
         return "";
     }
 
-    function verbalizeMove(move) {
+    function verbalizeMove(move, options) {
         if (!move || typeof move !== "object") {
             return "";
         }
@@ -506,12 +667,12 @@
         }
 
         var piece = String(move.piece || "").toLowerCase();
-        var destination = formatSquare(move.to);
+        var destination = formatSquare(move.to, options);
         if (!PIECE_WORDS[piece] || !destination) {
             return "";
         }
 
-        var origin = formatSquare(move.from);
+        var origin = formatSquare(move.from, options);
         var phrase = PIECE_WORDS[piece];
         if (origin) {
             phrase += " de " + origin;
@@ -562,6 +723,10 @@
         if (/^[a-h][1-8]$/.test(from)) {
             variants.push(pieceWord + "de " + from + " para " + to);
             variants.push(pieceWord + "de " + formatSquare(from) + " para " + spelled);
+            // Bare origin+destination coordinates, the instructed form ("e2 e4",
+            // "é dois é quatro"), so the recognizer expects and returns them.
+            variants.push(from + " " + to);
+            variants.push(formatSquare(from) + " " + spelled);
         }
 
         var promotion = movePromotion(move);
@@ -670,6 +835,7 @@
         verbalizeMove: verbalizeMove,
         formatSquare: formatSquare,
         spokenMoveVariants: spokenMoveVariants,
-        rankMovesBySpeech: rankMovesBySpeech
+        rankMovesBySpeech: rankMovesBySpeech,
+        movePromotion: movePromotion
     };
 }));

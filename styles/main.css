@@ -87,14 +87,21 @@
  * Every internal message used to land in a 1px clipped region, so a sighted
  * user saw nothing at all when a command failed.
  */
+/*
+ * Anchored to the bottom-RIGHT, not the bottom-left: on Chess.com the board
+ * sits on the left, so a left pill covered it. The right edge is over the
+ * analysis/sidebar column. Kept narrow so it never spills back across the board,
+ * and it is the only on-screen text the extension shows during play — move
+ * confirmation is voice-only and draws nothing over the board at all.
+ */
 .freedom-chess-status {
     background: #1b1a18;
     border-radius: 0.8rem;
     bottom: 1.6rem;
     color: #f4f2ef;
     font: 600 1.4rem/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    left: 1.6rem;
-    max-width: min(42rem, 80vw);
+    right: 1.6rem;
+    max-width: min(32rem, 34vw);
     opacity: 0;
     padding: 1rem 1.4rem;
     pointer-events: none;
@@ -107,46 +114,139 @@
     opacity: 1;
 }
 
+/*
+ * Persistent how-to card, bottom-right over the sidebar (never the board), sat
+ * above the status pill. Shown only while the mode is active. `hidden` keeps it
+ * out of the layout and the accessibility tree when off.
+ */
+.freedom-chess-help {
+    background: #1b1a18;
+    border-radius: 0.8rem;
+    bottom: 7rem;
+    box-shadow: 0 0.4rem 1.2rem rgb(0 0 0 / 35%);
+    color: #f4f2ef;
+    display: flex;
+    flex-direction: column;
+    font: 500 1.3rem/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    gap: 0.4rem;
+    max-width: min(32rem, 34vw);
+    padding: 1.2rem 1.4rem;
+    pointer-events: none;
+    position: fixed;
+    right: 1.6rem;
+    z-index: 2147483644;
+}
+
+.freedom-chess-help[hidden] {
+    display: none;
+}
+
+.freedom-chess-help-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-bottom: 0.2rem;
+}
+
+.freedom-chess-help b {
+    color: #a8d08a;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+    .freedom-chess-help {
+        display: none;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .freedom-chess-status {
         transition: none;
     }
 }
 
+/*
+ * The confirmation used to be a full-screen scrim, so a player was asked to
+ * confirm a move while the board it applied to was hidden behind the question.
+ * It is now a rail pinned to the bottom edge: `inset: auto 0 0` keeps it only
+ * as tall as its content, and `pointer-events: none` means every click outside
+ * the panel still reaches Chess.com. A child can re-enable hit-testing that its
+ * parent disabled, which is what `pointer-events: auto` on the panel does.
+ */
 .freedom-chess-dialog-overlay {
-    align-items: center;
-    background: rgb(0 0 0 / 62%);
+    align-items: flex-end;
     display: flex;
-    inset: 0;
+    inset: auto 0 0;
     justify-content: center;
-    padding: 2rem;
+    padding: 0 1.6rem 1.6rem;
+    pointer-events: none;
     position: fixed;
     z-index: 2147483646;
 }
 
 .freedom-chess-dialog {
+    animation: freedom-chess-panel-in 0.18s ease-out;
     background: #fff;
+    /*
+     * With no scrim behind it the panel has to separate itself from the page,
+     * hence the real border (not just a colour, which would never render
+     * against `border-style: none`) and the two-layer shadow. `max-height` is a
+     * hard guard: a long message must never grow the panel back over the board.
+     */
+    border: 0.1rem solid rgb(0 0 0 / 18%);
     border-radius: 1.2rem;
-    box-shadow: 0 1.6rem 5rem rgb(0 0 0 / 35%);
+    box-shadow: 0 0.4rem 1.2rem rgb(0 0 0 / 25%), 0 1.6rem 4rem rgb(0 0 0 / 45%);
+    box-sizing: border-box;
     color: #262421;
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    max-width: 48rem;
-    padding: 2.4rem;
-    width: min(100%, 48rem);
+    max-height: min(28vh, 20rem);
+    max-width: 56rem;
+    overflow-y: auto;
+    padding: 1.2rem 2rem;
+    pointer-events: auto;
+    width: min(100%, 56rem);
 }
 
+/*
+ * Height is the scarce resource now: every rem the panel occupies is a rem of
+ * board covered. The title is boilerplate ("Confirmar lance"); the question is
+ * the thing the player has to read, so the emphasis flips. Measured effect:
+ * ~180px of panel becomes ~155px.
+ */
 .freedom-chess-dialog h2 {
     color: inherit;
-    font-size: 2.2rem;
-    line-height: 1.25;
-    margin: 0 0 1.2rem;
+    font-size: 1.5rem;
+    line-height: 1.3;
+    margin: 0 0 0.4rem;
+    opacity: 0.75;
 }
 
 .freedom-chess-dialog p {
     color: inherit;
-    font-size: 1.6rem;
-    line-height: 1.5;
+    font-size: 1.8rem;
+    line-height: 1.4;
     margin: 0;
+}
+
+/*
+ * While the panel is up it owns the bottom strip, so announceStatus() writes
+ * here instead of into the pill. Two classes deep so it outranks
+ * `.freedom-chess-dialog p` on specificity, not on source order. `:empty`
+ * rather than the `hidden` attribute: this is a live region, and a live region
+ * removed from the accessibility tree is not announced.
+ */
+.freedom-chess-dialog p.freedom-chess-dialog-hint {
+    border-top: 0.1rem solid rgb(0 0 0 / 12%);
+    font-size: 1.4rem;
+    font-weight: 600;
+    line-height: 1.35;
+    margin: 1rem 0 0;
+    opacity: 0.85;
+    padding-top: 0.8rem;
+}
+
+.freedom-chess-dialog p.freedom-chess-dialog-hint:empty {
+    display: none;
 }
 
 .freedom-chess-dialog-actions {
@@ -154,13 +254,20 @@
     flex-wrap: wrap;
     gap: 1rem;
     justify-content: flex-end;
-    margin-top: 2.4rem;
+    margin-top: 1.2rem;
 }
 
 .freedom-chess-dialog-button {
     background: #e7e6e5;
-    border: 0;
+    /*
+     * A transparent border, not `border: 0`: the dark theme overrides
+     * border-color, which renders nothing when border-style is none.
+     * box-sizing pins the 44px touch target instead of inheriting whatever
+     * Chess.com's reset does to a content-box min-height.
+     */
+    border: 0.1rem solid transparent;
     border-radius: 0.6rem;
+    box-sizing: border-box;
     color: #262421;
     cursor: pointer;
     font: 700 1.5rem/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -177,8 +284,9 @@
     outline-offset: 0.2rem;
 }
 
+/* #4f8f3a with white text is 3.95:1 at 15px/700, which is not "large text". */
 .freedom-chess-dialog-button.is-primary {
-    background: #4f8f3a;
+    background: #3f7a2c;
     color: #fff;
 }
 
@@ -199,20 +307,101 @@
     }
 }
 
+/* A panel with no scrim behind it is easy to miss; motion is what announces it. */
+@keyframes freedom-chess-panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(1.2rem);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .freedom-chess-button::after {
+        animation: none !important;
+    }
+
+    .freedom-chess-dialog {
         animation: none !important;
     }
 }
 
 @media (prefers-color-scheme: dark) {
+    /*
+     * #312e2b is the exact surface colour Chess.com uses. With the scrim gone
+     * the panel would dissolve into the page, so it needs a lighter fill and a
+     * light hairline to keep reading as something floating above the board.
+     */
     .freedom-chess-dialog {
-        background: #312e2b;
+        background: #3c3936;
+        border-color: rgb(255 255 255 / 22%);
+        box-shadow: 0 0.4rem 1.2rem rgb(0 0 0 / 55%), 0 1.6rem 4rem rgb(0 0 0 / 65%);
         color: #f4f2ef;
     }
 
+    .freedom-chess-dialog p.freedom-chess-dialog-hint {
+        border-top-color: rgb(255 255 255 / 18%);
+    }
+
+    /*
+     * The border, not the fill, is what gives the buttons a 3:1 boundary here:
+     * for white text on a dark panel no solid green can satisfy both 4.5:1 text
+     * contrast and a 3:1 edge at once.
+     */
     .freedom-chess-dialog-button {
         background: #56524e;
+        border-color: rgb(255 255 255 / 22%);
         color: #fff;
+    }
+
+    /* brightness(0.96) darkens an already dark button: no visible hover at all. */
+    .freedom-chess-dialog-button:hover {
+        filter: brightness(1.14);
+    }
+
+    /* #2b78c5 on the dark panel is 2.5:1 — under the 3:1 non-text minimum. */
+    .freedom-chess-dialog-button:focus-visible {
+        outline-color: #81b64c;
+    }
+}
+
+/*
+ * Breakpoints are in px, not rem, and that is deliberate: the declarations in
+ * this file assume Chess.com's `html { font-size: 62.5% }` (1rem ~ 10px, which
+ * is why the toolbar button is 3.6rem), but `rem` inside a media query is
+ * locked to the initial 16px and ignores that. `70rem` here would mean 1120px.
+ *
+ * Below ~700px a centred 56rem panel reaches the bottom-right corner where
+ * #freedom-chess-fallback-controls parks the microphone button (1.6rem inset +
+ * 0.4rem padding + 3.6rem button = 6.0rem tall). The panel lifts above that row
+ * rather than sitting beside it. The status pill needs no clearance: it is
+ * parked in JS for the life of the panel.
+ */
+@media (max-width: 700px) {
+    .freedom-chess-dialog-overlay {
+        padding-bottom: 6.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .freedom-chess-dialog-overlay {
+        padding-left: 0.8rem;
+        padding-right: 0.8rem;
+    }
+
+    .freedom-chess-dialog {
+        padding: 1rem 1.2rem;
+    }
+
+    .freedom-chess-dialog-actions {
+        gap: 0.8rem;
+    }
+
+    .freedom-chess-dialog-button {
+        flex: 1 1 100%;
     }
 }
