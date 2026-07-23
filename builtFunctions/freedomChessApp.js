@@ -71,6 +71,20 @@
         }
     })();
 
+    // Coordinate-only input: a move must name its origin AND destination
+    // ("e2 e4", "g1 f3"). Piece names ("cavalo f3") and bare destinations
+    // ("e4") are ignored — origin+destination is far more robust on a recognizer
+    // that drops short words, because the redundant origin recovers the move
+    // when the destination file is clipped. Castling and promotion still work.
+    //   localStorage.freedomChessPieceMode = "1"  -> also accept piece/SAN input
+    const COORDINATE_ONLY = (() => {
+        try {
+            return globalThis.localStorage?.getItem?.("freedomChessPieceMode") !== "1";
+        } catch (_error) {
+            return true;
+        }
+    })();
+
     function debug(...args) {
         if (DEBUG) {
             globalThis.console?.log?.("%c[FreedomChess]", "color:#81b64c;font-weight:bold", ...args);
@@ -389,10 +403,10 @@
             help.hidden = true;
             help.innerHTML = [
                 '<strong class="freedom-chess-help-title">Como falar o lance</strong>',
-                '<span>Casa de origem e casa de destino: <b>e2 e4</b>, <b>g1 f3</b>.</span>',
-                '<span>Se ele errar a coluna, use o nome: <b>estrela quatro</b> = coluna e.</span>',
+                '<span>Sempre casa de origem e casa de destino: <b>e2 e4</b>, <b>g1 f3</b>.</span>',
+                '<span>Coluna que ele erra? Fale o nome dela: <b>estrela</b> = e, <b>ana</b> = a.</span>',
                 '<span>Roque: <b>roque</b> ou <b>roque grande</b>. Promoção: diga a peça.</span>',
-                '<span>Depois de cada lance: <b>confirma</b> ou <b>muda</b>.</span>',
+                '<span>Na dúvida ele pergunta — aí responda <b>confirma</b> ou <b>muda</b>.</span>',
             ].join("");
             (document.body || document.documentElement).append(help);
             this.help = help;
@@ -1785,8 +1799,20 @@
                 // this move is trusted enough to play without asking.
                 let topMove = null;
                 let topConfidence = null;
+                let sawBareDestination = false;
                 alternatives.forEach((alternative, index) => {
                     const intent = Core.parseMoveIntent(alternative.transcript);
+                    if (index === 0) {
+                        topConfidence = typeof alternative.confidence === "number" ? alternative.confidence : null;
+                    }
+                    // Coordinate-only: the origin (its rank at least) must be
+                    // named. Piece names and bare destinations are ignored, but
+                    // remembered so we can guide the player instead of guessing.
+                    if (COORDINATE_ONLY && !intent.castle && !intent.reason && !intent.originRank) {
+                        if (intent.toSquare) { sawBareDestination = true; }
+                        debug("ignorado (não é coordenada origem+destino)", alternative.transcript);
+                        return;
+                    }
                     const result = Core.matchMoveIntent(intent, state.legalMoves);
                     debug("intenção", alternative.transcript, "->", intent.normalized, intent.reason || "", "=>", result.status);
                     if (result.status === "matched") {
@@ -1794,9 +1820,6 @@
                         if (index === 0) { topMove = result.move; }
                     } else if (result.status === "ambiguous") {
                         ambiguousCandidates = [...ambiguousCandidates, ...result.candidates];
-                    }
-                    if (index === 0) {
-                        topConfidence = typeof alternative.confidence === "number" ? alternative.confidence : null;
                     }
                 });
 
@@ -1856,6 +1879,16 @@
                 }
 
                 if (!this.isSessionCurrent(generation)) {
+                    return;
+                }
+
+                // The player named a piece or a bare destination in
+                // coordinate-only mode. Guide, do not guess a move for them.
+                if (COORDINATE_ONLY && sawBareDestination) {
+                    await this.voice.speak(
+                        "Diga a casa de origem e a casa de destino. Por exemplo, e2 e4.",
+                        { resume: true },
+                    );
                     return;
                 }
 
@@ -2208,15 +2241,19 @@
             }
 
             this.currentState = resultingState;
+            // Dedup key matches whatever the follow-up state-changed event will
+            // carry, so handleStateChanged does not announce the move twice.
             this.lastAnnouncedMove = moveKey(resultingState.lastMove || stillLegal);
             this.updatePhraseHints(resultingState);
-            const played = resultingState.lastMove || stillLegal;
+            // Announce the move WE validated and played, never resultingState's
+            // lastMove: the analysis board returns that null or oddly shaped, and
+            // verbalizeMove() would then say "Seu lance: ." with no move at all.
             // "Seu lance" rather than "Lance realizado": with the question gone,
             // the player's own move and the opponent's reply would otherwise be
             // the same sentence twice in a row.
-            await this.voice.speak(`Seu lance: ${Core.verbalizeMove(played)}.`, {
+            await this.voice.speak(`Seu lance: ${Core.verbalizeMove(stillLegal)}.`, {
                 resume: true,
-                display: `Seu lance: ${Core.verbalizeMove(played, { plain: true })}.`,
+                display: `Seu lance: ${Core.verbalizeMove(stillLegal, { plain: true })}.`,
             });
         }
 
@@ -2320,17 +2357,22 @@
                 await delay(100);
                 try {
                     const state = await this.bridge.getState(700, { minimal: true });
-                    const lastMove = state?.lastMove;
-                    const exactLastMove = lastMove?.from === move.from
-                        && lastMove?.to === move.to
-                        && (!Core.movePromotion(move) || Core.movePromotion(lastMove) === Core.movePromotion(move));
-                    if (state?.fen && state.fen !== previousFen && exactLastMove) {
+                    // A FEN change is proof enough that OUR move landed: nothing
+                    // else can move on our turn. We deliberately do NOT gate on
+                    // getLastMove() — the analysis board returns it null or with
+                    // coordinates in a shape that never matched, so every
+                    // analysis move reported a false failure and then looped on
+                    // its own error audio. The only genuine failure left is a FEN
+                    // that never changes (e.g. a "confirm move" prompt swallowed
+                    // the click), which still times out below.
+                    if (state?.fen && state.fen !== previousFen) {
                         return state;
                     }
                 } catch (_error) {
                     // Retry while the board finishes its transition.
                 }
             }
+            debug("waitForMove: o FEN não mudou dentro do tempo", { previousFen });
             return null;
         }
 

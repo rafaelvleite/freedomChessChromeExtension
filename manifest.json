@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Freedom Chess for Chess.com",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Controle o tabuleiro do Chess.com por voz, com foco em acessibilidade e privacidade.",
   "permissions": [
     "storage"

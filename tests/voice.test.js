@@ -528,13 +528,13 @@ function makeMoveApp(FreedomChessApp, { legalMoves }) {
 
 test("a high-confidence top match is played without confirmation", async () => {
     // The "convicção alta" fast path: a confident, unambiguous top guess plays
-    // at once. Default threshold is 0.9.
+    // at once. Default threshold is 0.97. Coordinate input ("g1 f3").
     const realCore = require("../builtFunctions/core.js");
     const { FreedomChessApp } = loadInternals({ core: realCore });
     const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
     const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: [knight] });
 
-    await app.handleAlternatives([{ transcript: "cavalo f3", confidence: 0.98 }]);
+    await app.handleAlternatives([{ transcript: "g1 f3", confidence: 0.98 }]);
 
     assert.equal(executions.length, 1, "a confident move is played straight away");
     assert.equal(executions[0], knight);
@@ -548,7 +548,7 @@ test("a low-confidence match is confirmed, not auto-played", async () => {
     const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
     const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: [knight] });
 
-    await app.handleAlternatives([{ transcript: "cavalo f3", confidence: 0.4 }]);
+    await app.handleAlternatives([{ transcript: "g1 f3", confidence: 0.4 }]);
 
     assert.equal(confirmations.length, 1, "an unsure move waits for a spoken yes");
     assert.equal(confirmations[0].move, knight);
@@ -563,7 +563,7 @@ test("a match with no confidence score is confirmed", async () => {
     const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
     const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: [knight] });
 
-    await app.handleAlternatives([{ transcript: "cavalo f3", confidence: null }]);
+    await app.handleAlternatives([{ transcript: "g1 f3", confidence: null }]);
 
     assert.equal(confirmations.length, 1, "no confidence means confirm");
     assert.equal(executions.length, 0);
@@ -579,7 +579,7 @@ test("a confident move that is only a secondary alternative is confirmed", async
 
     await app.handleAlternatives([
         { transcript: "qual é o placar", confidence: 0.98 },
-        { transcript: "cavalo f3", confidence: 0.98 },
+        { transcript: "g1 f3", confidence: 0.98 },
     ]);
 
     assert.equal(confirmations.length, 1, "only the top alternative earns the fast path");
@@ -595,7 +595,7 @@ test("a promotion whose piece was not named asks for the piece, not the origin s
     }));
     const { app, spoken, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: promotions });
 
-    await app.handleAlternatives([{ transcript: "peão é oito", confidence: 0.9 }]);
+    await app.handleAlternatives([{ transcript: "e7 e8", confidence: 0.9 }]);
 
     assert.equal(executions.length, 0, "an unnamed promotion is never auto-played");
     assert.equal(confirmations.length, 0);
@@ -612,7 +612,7 @@ test("a fully named promotion is resolved to the right piece and played when con
     }));
     const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: promotions });
 
-    await app.handleAlternatives([{ transcript: "peão é oito dama", confidence: 0.98 }]);
+    await app.handleAlternatives([{ transcript: "e7 e8 dama", confidence: 0.98 }]);
 
     assert.equal(executions.length, 1, "a confident, fully named promotion plays");
     assert.equal(realCore.movePromotion(executions[0]), "q");
@@ -627,11 +627,29 @@ test("a fully named promotion at low confidence is confirmed", async () => {
     }));
     const { app, executions, confirmations } = makeMoveApp(FreedomChessApp, { legalMoves: promotions });
 
-    await app.handleAlternatives([{ transcript: "peão é oito dama", confidence: 0.5 }]);
+    await app.handleAlternatives([{ transcript: "e7 e8 dama", confidence: 0.5 }]);
 
     assert.equal(confirmations.length, 1, "an unsure promotion still gets confirmed");
     assert.equal(realCore.movePromotion(confirmations[0].move), "q");
     assert.equal(executions.length, 0);
+});
+
+test("coordinate-only: a piece name or bare destination is refused with guidance", async () => {
+    const realCore = require("../builtFunctions/core.js");
+    const { FreedomChessApp } = loadInternals({ core: realCore });
+    const knight = { from: "g1", to: "f3", piece: "n", flags: "n", san: "Nf3" };
+
+    for (const bare of ["cavalo f3", "e4"]) {
+        const { app, spoken, executions, confirmations } =
+            makeMoveApp(FreedomChessApp, { legalMoves: [knight] });
+        await app.handleAlternatives([{ transcript: bare, confidence: 0.98 }]);
+
+        assert.equal(executions.length, 0, `"${bare}" must not be played`);
+        assert.equal(confirmations.length, 0, `"${bare}" must not be confirmed`);
+        assert.equal(spoken.length, 1, `"${bare}" gets one guidance message`);
+        assert.match(spoken[0], /origem/, bare);
+        assert.match(spoken[0], /e2 e4/, bare);
+    }
 });
 
 test("move confirmation is voice-only: no dialog, 'muda' rejects, 'confirma' plays", async () => {
